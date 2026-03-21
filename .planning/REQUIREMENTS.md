@@ -11,8 +11,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **AUTH-01**: User can sign in with Google OAuth (one-click)
 - [ ] **AUTH-02**: User session persists across browser restarts
-- [ ] **AUTH-03**: User data syncs across devices via cloud storage
-- [ ] **AUTH-04**: AI explanations are powered by hosted API (bubb-managed, no user API key required)
+- [x] **AUTH-03**: User data syncs across devices via cloud storage
+- [x] **AUTH-04**: AI explanations are powered by hosted API (bubb-managed, no user API key required)
 
 ### Core Interaction
 
@@ -87,8 +87,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | AUTH-01 | Phase 1 | Pending |
 | AUTH-02 | Phase 1 | Pending |
-| AUTH-03 | Phase 1 | Pending |
-| AUTH-04 | Phase 1 | Pending |
+| AUTH-03 | Phase 1 | Complete |
+| AUTH-04 | Phase 1 | Complete |
 | CORE-01 | Phase 2 | Pending |
 | CORE-02 | Phase 2 | Pending |
 | CORE-03 | Phase 3 | Pending |
