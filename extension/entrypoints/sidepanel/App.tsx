@@ -84,17 +84,21 @@ function App() {
     }
   }, []);
 
-  // Loading state while checking initial auth
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+      <div className="flex flex-col items-center justify-center min-h-[480px]">
+        <p
+          className="text-[22px] italic animate-pulse"
+          style={{ fontFamily: 'var(--font-serif)', color: 'hsl(24 10% 20%)' }}
+        >
+          bubb
+        </p>
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="min-h-[480px]">
       {error && (
         <div className="px-6 pt-4">
           <AuthErrorBanner
