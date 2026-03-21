@@ -1,0 +1,37 @@
+{
+  "name": "bubb-extension",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt dev",
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "zip": "wxt zip",
+    "compile": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@radix-ui/react-separator": "^1.1.8",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@supabase/supabase-js": "^2.99.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "latest",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwind-merge": "^3.5.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.8",
+    "@tailwindcss/vite": "^4.2.2",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@wxt-dev/module-react": "^1.2.2",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.0",
+    "wxt": "^0.20.20"
+  }
+}
