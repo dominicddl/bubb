@@ -33,7 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Scaffold monorepo: WXT extension + FastAPI backend + Supabase schema with RLS
+- [x] 01-01-PLAN.md — Scaffold monorepo: WXT extension + FastAPI backend + Supabase schema with RLS
 - [ ] 01-02-PLAN.md — Backend JWT verification, health endpoints, and test suite
 - [ ] 01-03-PLAN.md — Extension-side Google OAuth flow, session persistence, and auth UI
 
@@ -103,7 +103,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation and Auth | 0/3 | Not started | - |
+| 1. Foundation and Auth | 1/3 | In Progress|  |
 | 2. Core Interaction | 0/3 | Not started | - |
 | 3. AI Depth and Follow-ups | 0/2 | Not started | - |
 | 4. Knowledge Base and Side Panel | 0/3 | Not started | - |
