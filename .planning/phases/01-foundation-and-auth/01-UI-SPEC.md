@@ -23,7 +23,7 @@ created: 2026-03-21
 | Icon library | lucide-react |
 | Font | Inter (system font stack fallback: `-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`) |
 
-**Note:** The extension project does not exist yet. shadcn must be initialized as part of the WXT scaffold step in Plan 01-01. The executor should run `npx shadcn@latest init` inside the `extension/` directory after WXT scaffolding completes, then install the components listed in Registry Safety below.
+**Prerequisite:** The extension project does not exist yet. shadcn must be initialized as part of the WXT scaffold step in Plan 01-01. The executor must run `npx shadcn@latest init` inside the `extension/` directory after WXT scaffolding completes. No shadcn components can be installed or used until this init step completes successfully. After init, install the components listed in Registry Safety below.
 
 ---
 
@@ -41,7 +41,7 @@ Declared values (must be multiples of 4):
 | 2xl | 48px | Side panel top/bottom page padding |
 | 3xl | 64px | Not used in Phase 1 |
 
-Exceptions: Touch targets for the "Sign in with Google" button must be at least 44px height (accessibility).
+**Constraint (not a spacing token):** Interactive touch targets (e.g., "Sign in with Google" button) must have a minimum height of 44px for accessibility. This is a sizing constraint on elements, not part of the spacing scale.
 
 ---
 
@@ -50,9 +50,11 @@ Exceptions: Touch targets for the "Sign in with Google" button must be at least 
 | Role | Size | Weight | Line Height |
 |------|------|--------|-------------|
 | Body | 14px | 400 (regular) | 1.5 |
-| Label | 12px | 500 (medium) | 1.4 |
+| Label | 12px | 400 (regular) | 1.4 |
 | Heading | 18px | 600 (semibold) | 1.2 |
 | Display | 24px | 600 (semibold) | 1.2 |
+
+**Weights used:** 2 — regular (400) and semibold (600). Regular for body and label text. Semibold for headings and display.
 
 **Rationale:** Side panels are narrow (default ~320px). 14px body keeps text readable without overflow. 12px labels for secondary info (timestamps, status). Display size used only for the welcome/sign-in screen heading.
 
@@ -84,11 +86,19 @@ Accent reserved for: "Sign in with Google" primary CTA button, retry button in e
 | Auth error banner | "Sign-in failed. Check your connection and try again." |
 | Auth error retry button | "Try again" |
 | Session expired banner | "Your session has expired. Sign in again to continue syncing." |
-| Session expired CTA | "Sign in" |
+| Session expired CTA | "Sign in again" |
 | Usage warning (80%+) | "You've used {count} of {limit} explanations today. Resets in {time}." |
 | Usage limit reached | "Daily limit reached. Resets in {time}." |
-| Sign-out confirmation | Sign out: "Sign out of bubb? Local highlights will still work." |
+| Sign-out confirmation | Inline confirm banner: "Sign out of bubb? Local highlights will still work." with "Sign out" (destructive button) and "Cancel" (ghost button). |
 | Preview mode indicator | "Preview mode — sign in to save your learning" |
+
+---
+
+## Visual Hierarchy
+
+**Primary screen focal point (Signed Out):** The "Sign in with Google" button is the single focal point. It uses accent color on a white background, is the largest interactive element, and sits vertically centered in the side panel below the welcome heading. All other elements (heading, body text, preview badge) support this focal point.
+
+**Primary screen focal point (Signed In):** The greeting "Hey, {first_name}" is the focal point, using Display size (24px semibold) at the top of the panel. Secondary elements (placeholder body, sign-out button) are visually subordinate using Body/Label size and muted color.
 
 ---
 
@@ -116,7 +126,7 @@ These are the UI surfaces built in this phase. Each maps to a shadcn component o
 
 ### Auth Error Banner (Inline)
 - Appears at top of side panel
-- Dismissible (X button)
+- Dismissible (X button with `aria-label="Dismiss error"`)
 - Contains: error icon (lucide `AlertCircle`), message text, retry button
 - Background: secondary color with destructive left border (4px)
 
@@ -124,7 +134,7 @@ These are the UI surfaces built in this phase. Each maps to a shadcn component o
 
 | Component | Usage |
 |-----------|-------|
-| Button | Sign in CTA, retry, sign out |
+| Button | Sign in CTA, retry, sign out, cancel |
 | Card | Side panel content wrapper |
 | Alert | Auth error banner, usage warning, usage limit |
 | Badge | Preview mode indicator |
@@ -137,9 +147,9 @@ These are the UI surfaces built in this phase. Each maps to a shadcn component o
 | Interaction | Behavior |
 |-------------|----------|
 | Sign in button click | Button shows loading spinner, text changes to "Signing in...", disabled state. On success: side panel re-renders to signed-in state. On failure: error banner appears at top. |
-| Sign out button click | Confirmation dialog (or inline confirm). On confirm: session cleared, side panel re-renders to signed-out state. |
+| Sign out button click | Inline confirm banner appears: "Sign out of bubb? Local highlights will still work." with "Sign out" (destructive) and "Cancel" (ghost) buttons. On confirm: session cleared, side panel re-renders to signed-out state. On cancel: banner dismissed. |
 | Error banner retry | Same loading behavior as sign-in. Banner dismisses on success. |
-| Error banner dismiss | X button removes banner. Banner reappears only on next failed auth attempt. |
+| Error banner dismiss | X button (aria-label="Dismiss error") removes banner. Banner reappears only on next failed auth attempt. |
 | Usage warning | Non-dismissible informational banner. Updates count in real-time. |
 | Usage limit reached | Non-dismissible blocking banner. Replaces any usage warning. |
 
@@ -149,7 +159,7 @@ These are the UI surfaces built in this phase. Each maps to a shadcn component o
 
 | Registry | Blocks Used | Safety Gate |
 |----------|-------------|-------------|
-| shadcn official | Button, Card, Alert, Badge, Separator | not required |
+| shadcn official | Button, Card, Alert, Badge, Separator | not required — prerequisite: `npx shadcn@latest init` must complete before any component install |
 
 No third-party registries declared for Phase 1.
 
