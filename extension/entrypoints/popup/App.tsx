@@ -40,9 +40,12 @@ function App() {
           <Button
             size="sm"
             className="min-h-[44px] w-full"
-            onClick={() => {
+            onClick={async () => {
               // Open side panel where the full sign-in flow lives
-              chrome.sidePanel?.open?.({ windowId: undefined as unknown as number });
+              const currentWindow = await chrome.windows.getCurrent();
+              if (currentWindow.id != null) {
+                chrome.sidePanel.open({ windowId: currentWindow.id });
+              }
             }}
           >
             Sign in with Google
