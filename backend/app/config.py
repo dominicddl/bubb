@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     cors_origins: list[str] = ["chrome-extension://*"]
 
-    model_config = {"env_file": ".env"}
+    model_config = {"env_file": ["../.env", ".env"]}
 
 
 settings = Settings()

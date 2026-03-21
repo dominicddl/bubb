@@ -1,9 +1,9 @@
-import { supabase } from './supabase';
 import type { Session, User } from '@supabase/supabase-js';
 
 export interface AuthResult {
   success: boolean;
   error?: string;
+  user?: { id: string; email: string; name: string };
 }
 
 export interface AuthState {
@@ -12,82 +12,111 @@ export interface AuthState {
   session: Session | null;
 }
 
+const BACKEND_URL = import.meta.env.WXT_BACKEND_URL || 'http://127.0.0.1:8000';
+
 /**
- * Sign in with Google via chrome.identity.launchWebAuthFlow (D-01).
- * Uses ID token flow (response_type=id_token), NOT PKCE.
- * Google gets the hashed nonce, Supabase gets the raw nonce.
+ * Sign in with Google via a real Chrome tab (avoids "browser not secure" error).
+ * Opens Google OAuth in a normal tab, captures the redirect, and exchanges
+ * the access token with our backend for a Supabase session.
  */
 export async function signInWithGoogle(): Promise<AuthResult> {
   try {
-    // 1. Generate cryptographic nonce
-    const nonce = btoa(
-      String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))
-    );
-
-    // 2. Hash nonce for Google (Supabase receives raw nonce to verify)
-    const encoder = new TextEncoder();
-    const encodedNonce = encoder.encode(nonce);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', encodedNonce);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashedNonce = hashArray
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-
-    // 3. Build Google OAuth URL
+    // 1. Build Google OAuth URL
     const manifest = chrome.runtime.getManifest();
     const clientId = manifest.oauth2?.client_id;
-    if (!clientId || clientId === 'PLACEHOLDER.apps.googleusercontent.com') {
-      throw new Error(
-        'OAuth2 client_id not configured in manifest. ' +
-          'Update wxt.config.ts with your Google Cloud Console client ID.'
-      );
+    if (!clientId) {
+      throw new Error('OAuth2 client_id not configured in manifest.');
     }
 
     const redirectUrl = chrome.identity.getRedirectURL();
-    const authUrl = new URL('https://accounts.google.com/o/oauth2/auth');
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     authUrl.searchParams.set('client_id', clientId);
-    authUrl.searchParams.set('response_type', 'id_token');
-    authUrl.searchParams.set('access_type', 'offline');
+    authUrl.searchParams.set('response_type', 'token');
     authUrl.searchParams.set('redirect_uri', redirectUrl);
     authUrl.searchParams.set('scope', 'openid email profile');
-    authUrl.searchParams.set('nonce', hashedNonce);
-    authUrl.searchParams.set('prompt', 'consent');
 
-    // 4. Launch native Google account picker (D-01)
-    const responseUrl = await new Promise<string>((resolve, reject) => {
-      chrome.identity.launchWebAuthFlow(
-        { url: authUrl.href, interactive: true },
-        (redirectedTo) => {
-          if (chrome.runtime.lastError || !redirectedTo) {
-            reject(
-              new Error(
-                chrome.runtime.lastError?.message || 'Auth flow cancelled or failed'
-              )
-            );
-          } else {
-            resolve(redirectedTo);
-          }
+    // 2. Open in a real Chrome tab (not embedded browser)
+    const tab = await chrome.tabs.create({ url: authUrl.href });
+
+    // 3. Listen for redirect back to our extension's redirect URL
+    return new Promise<AuthResult>((resolve) => {
+      const listener = async (
+        tabId: number,
+        changeInfo: chrome.tabs.TabChangeInfo,
+      ) => {
+        if (tabId !== tab.id || !changeInfo.url?.startsWith(redirectUrl)) {
+          return;
         }
-      );
+
+        chrome.tabs.onUpdated.removeListener(listener);
+        chrome.tabs.onRemoved.removeListener(closeListener);
+        chrome.tabs.remove(tabId);
+
+        try {
+          // 4. Extract access token from URL fragment
+          const url = new URL(changeInfo.url);
+          const params = new URLSearchParams(url.hash.substring(1));
+          const googleToken = params.get('access_token');
+
+          if (!googleToken) {
+            resolve({ success: false, error: 'No access token in redirect' });
+            return;
+          }
+
+          // 5. Exchange Google token for Supabase session via backend
+          const response = await fetch(`${BACKEND_URL}/api/auth/google`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ access_token: googleToken }),
+          });
+
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'Backend auth failed' }));
+            resolve({ success: false, error: error.detail || 'Backend auth failed' });
+            return;
+          }
+
+          const data = await response.json();
+
+          // 6. Store session manually in chrome.storage
+          //    We generate our own JWT so there's no refresh token.
+          //    Store the session in the format Supabase client expects.
+          const supabaseUrl = import.meta.env.WXT_SUPABASE_URL;
+          const storageKey = `sb-${new URL(supabaseUrl).hostname}-auth-token`;
+          const session = {
+            access_token: data.access_token,
+            refresh_token: '',
+            token_type: 'bearer',
+            expires_in: 3600,
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+            user: {
+              id: data.user.id,
+              email: data.user.email,
+              user_metadata: { full_name: data.user.name },
+              aud: 'authenticated',
+              role: 'authenticated',
+            },
+          };
+          await chrome.storage.local.set({ [storageKey]: JSON.stringify(session) });
+          resolve({ success: true, user: data.user });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Auth failed';
+          resolve({ success: false, error: message });
+        }
+      };
+
+      chrome.tabs.onUpdated.addListener(listener);
+
+      // Clean up if tab is closed before auth completes
+      const closeListener = (closedTabId: number) => {
+        if (closedTabId === tab.id) {
+          chrome.tabs.onUpdated.removeListener(listener);
+          chrome.tabs.onRemoved.removeListener(closeListener);
+          resolve({ success: false, error: 'Sign-in cancelled' });
+        }
+      };
+      chrome.tabs.onRemoved.addListener(closeListener);
     });
-
-    // 5. Extract ID token from redirect URL hash fragment
-    const url = new URL(responseUrl);
-    const params = new URLSearchParams(url.hash.substring(1));
-    const idToken = params.get('id_token');
-    if (!idToken) {
-      throw new Error('No id_token in Google response');
-    }
-
-    // 6. Exchange ID token with Supabase (raw nonce, not hashed)
-    const { error } = await supabase.auth.signInWithIdToken({
-      provider: 'google',
-      token: idToken,
-      nonce: nonce,
-    });
-
-    if (error) throw error;
-    return { success: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown auth error';
     console.error('[bubb] signInWithGoogle failed:', message);
@@ -95,13 +124,18 @@ export async function signInWithGoogle(): Promise<AuthResult> {
   }
 }
 
+function getStorageKey(): string {
+  const supabaseUrl = import.meta.env.WXT_SUPABASE_URL;
+  return `sb-${new URL(supabaseUrl).hostname}-auth-token`;
+}
+
 /**
  * Sign out and clear session from chrome.storage.local.
  */
 export async function signOut(): Promise<AuthResult> {
   try {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    await chrome.identity.clearAllCachedAuthTokens();
+    await chrome.storage.local.remove(getStorageKey());
     return { success: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Sign out failed';
@@ -110,16 +144,32 @@ export async function signOut(): Promise<AuthResult> {
 }
 
 /**
- * Get current auth state. Reads session from chrome.storage.local
- * via the Supabase client's custom adapter (AUTH-02).
+ * Get current auth state from chrome.storage.local.
  */
 export async function getAuthState(): Promise<AuthState> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  return {
-    isAuthenticated: session !== null,
-    user: session?.user ?? null,
-    session,
-  };
+  try {
+    const key = getStorageKey();
+    const result = await chrome.storage.local.get(key);
+    const raw = result[key];
+    if (!raw) return { isAuthenticated: false, user: null, session: null };
+
+    const session = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!session?.access_token || !session?.user) {
+      return { isAuthenticated: false, user: null, session: null };
+    }
+
+    // Check if token is expired
+    if (session.expires_at && session.expires_at < Math.floor(Date.now() / 1000)) {
+      await chrome.storage.local.remove(key);
+      return { isAuthenticated: false, user: null, session: null };
+    }
+
+    return {
+      isAuthenticated: true,
+      user: session.user,
+      session,
+    };
+  } catch {
+    return { isAuthenticated: false, user: null, session: null };
+  }
 }
