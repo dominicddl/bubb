@@ -85,33 +85,33 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | — | Pending |
-| AUTH-02 | — | Pending |
-| AUTH-03 | — | Pending |
-| AUTH-04 | — | Pending |
-| CORE-01 | — | Pending |
-| CORE-02 | — | Pending |
-| CORE-03 | — | Pending |
-| CORE-04 | — | Pending |
-| CORE-05 | — | Pending |
-| KB-01 | — | Pending |
-| KB-02 | — | Pending |
-| KB-03 | — | Pending |
-| KB-04 | — | Pending |
-| KB-05 | — | Pending |
-| KB-06 | — | Pending |
-| PANEL-01 | — | Pending |
-| PANEL-02 | — | Pending |
-| PANEL-03 | — | Pending |
-| PANEL-04 | — | Pending |
-| PANEL-05 | — | Pending |
-| RECALL-01 | — | Pending |
+| AUTH-01 | Phase 1 | Pending |
+| AUTH-02 | Phase 1 | Pending |
+| AUTH-03 | Phase 1 | Pending |
+| AUTH-04 | Phase 1 | Pending |
+| CORE-01 | Phase 2 | Pending |
+| CORE-02 | Phase 2 | Pending |
+| CORE-03 | Phase 3 | Pending |
+| CORE-04 | Phase 3 | Pending |
+| CORE-05 | Phase 2 | Pending |
+| KB-01 | Phase 2 | Pending |
+| KB-02 | Phase 2 | Pending |
+| KB-03 | Phase 4 | Pending |
+| KB-04 | Phase 4 | Pending |
+| KB-05 | Phase 4 | Pending |
+| KB-06 | Phase 4 | Pending |
+| PANEL-01 | Phase 4 | Pending |
+| PANEL-02 | Phase 4 | Pending |
+| PANEL-03 | Phase 4 | Pending |
+| PANEL-04 | Phase 4 | Pending |
+| PANEL-05 | Phase 4 | Pending |
+| RECALL-01 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 21 total
-- Mapped to phases: 0
-- Unmapped: 21
+- Mapped to phases: 21
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-21*
-*Last updated: 2026-03-21 after initial definition*
+*Last updated: 2026-03-21 after roadmap creation*
