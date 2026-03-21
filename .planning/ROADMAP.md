@@ -30,12 +30,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Extension connects to FastAPI backend with a valid JWT and receives an authenticated response
   4. Supabase database has RLS enabled on all tables so users can only access their own data
   5. AI API keys are stored server-side only and never exposed to the extension
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
-- [ ] 01-03: TBD
+- [ ] 01-01-PLAN.md — Scaffold monorepo: WXT extension + FastAPI backend + Supabase schema with RLS
+- [ ] 01-02-PLAN.md — Backend JWT verification, health endpoints, and test suite
+- [ ] 01-03-PLAN.md — Extension-side Google OAuth flow, session persistence, and auth UI
 
 ### Phase 2: Core Interaction
 **Goal**: Users can highlight text on any webpage and instantly receive a contextual AI explanation that is automatically saved as a note
