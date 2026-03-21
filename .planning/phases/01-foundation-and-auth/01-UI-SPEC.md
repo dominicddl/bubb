@@ -89,7 +89,7 @@ Accent reserved for: "Sign in with Google" primary CTA button, retry button in e
 | Session expired CTA | "Sign in again" |
 | Usage warning (80%+) | "You've used {count} of {limit} explanations today. Resets in {time}." |
 | Usage limit reached | "Daily limit reached. Resets in {time}." |
-| Sign-out confirmation | Inline confirm banner: "Sign out of bubb? Local highlights will still work." with "Sign out" (destructive button) and "Cancel" (ghost button). |
+| Sign-out confirmation | Inline confirm banner: "Sign out of bubb? Local highlights will still work." with "Sign out" (destructive button) and "Stay signed in" (ghost button). |
 | Preview mode indicator | "Preview mode — sign in to save your learning" |
 
 ---
@@ -147,7 +147,7 @@ These are the UI surfaces built in this phase. Each maps to a shadcn component o
 | Interaction | Behavior |
 |-------------|----------|
 | Sign in button click | Button shows loading spinner, text changes to "Signing in...", disabled state. On success: side panel re-renders to signed-in state. On failure: error banner appears at top. |
-| Sign out button click | Inline confirm banner appears: "Sign out of bubb? Local highlights will still work." with "Sign out" (destructive) and "Cancel" (ghost) buttons. On confirm: session cleared, side panel re-renders to signed-out state. On cancel: banner dismissed. |
+| Sign out button click | Inline confirm banner appears: "Sign out of bubb? Local highlights will still work." with "Sign out" (destructive) and "Stay signed in" (ghost) buttons. On confirm: session cleared, side panel re-renders to signed-out state. On dismiss: banner dismissed. |
 | Error banner retry | Same loading behavior as sign-in. Banner dismisses on success. |
 | Error banner dismiss | X button (aria-label="Dismiss error") removes banner. Banner reappears only on next failed auth attempt. |
 | Usage warning | Non-dismissible informational banner. Updates count in real-time. |
