@@ -1,4 +1,4 @@
-import { signInWithGoogle, signOut, getAuthState } from '@/lib/auth';
+import { signInWithGoogle, signOut, getAuthState, verifyBackendConnection } from '@/lib/auth';
 import type { ExtensionMessage, AuthResponse } from '@/lib/messaging';
 import { MessageType } from '@/lib/messaging';
 
@@ -19,19 +19,46 @@ export default defineBackground({
   },
 });
 
+/**
+ * Broadcast auth state change to all open extension contexts (sidepanel, popup).
+ * This ensures UI stays in sync when auth changes happen in the background.
+ */
+function broadcastAuthStateChanged(
+  isAuthenticated: boolean,
+  user: { id: string; email: string; name: string } | null,
+) {
+  chrome.runtime.sendMessage({
+    type: MessageType.AUTH_STATE_CHANGED,
+    payload: { isAuthenticated, user },
+  }).catch(() => {
+    // Ignore errors when no listeners are active (e.g., sidepanel is closed)
+  });
+}
+
 async function handleMessage(message: ExtensionMessage): Promise<AuthResponse> {
   switch (message.type) {
     case MessageType.SIGN_IN: {
       const result = await signInWithGoogle();
       if (result.success && result.user) {
+        const user = {
+          id: result.user.id,
+          email: result.user.email,
+          name: result.user.name,
+        };
+
+        // Broadcast to all open UI contexts
+        broadcastAuthStateChanged(true, user);
+
+        // Verify backend connectivity after successful sign-in
+        const backendOk = await verifyBackendConnection();
+        if (!backendOk) {
+          console.warn('[bubb] Backend connection verification failed — backend may be offline');
+        }
+
         return {
           success: true,
           isAuthenticated: true,
-          user: {
-            id: result.user.id,
-            email: result.user.email,
-            name: result.user.name,
-          },
+          user,
         };
       }
       return { success: false, error: result.error };
@@ -39,6 +66,10 @@ async function handleMessage(message: ExtensionMessage): Promise<AuthResponse> {
 
     case MessageType.SIGN_OUT: {
       const result = await signOut();
+
+      // Broadcast signed-out state to all open UI contexts
+      broadcastAuthStateChanged(false, null);
+
       return {
         success: result.success,
         error: result.error,
@@ -49,17 +80,10 @@ async function handleMessage(message: ExtensionMessage): Promise<AuthResponse> {
 
     case MessageType.GET_AUTH_STATE: {
       const state = await getAuthState();
-      const user = state.user as Record<string, any> | null;
       return {
         success: true,
         isAuthenticated: state.isAuthenticated,
-        user: user
-          ? {
-              id: user.id ?? '',
-              email: user.email ?? '',
-              name: user.user_metadata?.full_name ?? user.email ?? '',
-            }
-          : null,
+        user: state.user,
       };
     }
 
