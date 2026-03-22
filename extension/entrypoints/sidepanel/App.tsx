@@ -4,6 +4,7 @@ import type { AuthResponse, AuthStateChangedMessage } from '@/lib/messaging';
 import { SignedOutView } from './components/SignedOutView';
 import { SignedInView } from './components/SignedInView';
 import { AuthErrorBanner } from './components/AuthErrorBanner';
+import { BubbLogo } from '@/components/BubbLogo';
 
 interface UserInfo {
   id: string;
@@ -86,10 +87,11 @@ function App() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[480px]">
+      <div className="flex flex-col items-center justify-center min-h-[480px] gap-3 animate-pulse">
+        <BubbLogo size={36} />
         <p
-          className="text-[22px] italic animate-pulse"
-          style={{ fontFamily: 'var(--font-serif)', color: 'hsl(24 10% 20%)' }}
+          className="text-[17px] font-semibold tracking-[-0.01em]"
+          style={{ fontFamily: 'var(--font-sans)', color: 'hsl(24 10% 16%)' }}
         >
           bubb
         </p>
