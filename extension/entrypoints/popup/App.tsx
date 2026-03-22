@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
 import { MessageType } from '@/lib/messaging';
 import type { AuthResponse } from '@/lib/messaging';
+import { ArrowRight } from 'lucide-react';
+import { BubbLogo } from '@/components/BubbLogo';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -19,38 +20,94 @@ function App() {
 
   if (isLoading) {
     return (
-      <div className="w-[280px] p-4">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+      <div className="w-[280px] p-5">
+        <div className="flex items-center gap-2 animate-pulse">
+          <BubbLogo size={22} />
+          <p
+            className="text-[15px] font-semibold tracking-[-0.01em]"
+            style={{ fontFamily: 'var(--font-sans)', color: 'hsl(24 10% 16%)' }}
+          >
+            bubb
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="w-[280px] p-4">
-      <h1 className="text-lg font-semibold mb-2">bubb</h1>
-      {isAuthenticated ? (
-        <p className="text-sm text-muted-foreground">
-          Open the side panel to view your learning dashboard.
+    <div className="w-[280px] p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <BubbLogo size={22} />
+        <p
+          className="text-[15px] font-semibold tracking-[-0.01em]"
+          style={{ fontFamily: 'var(--font-sans)', color: 'hsl(24 10% 16%)' }}
+        >
+          bubb
         </p>
+      </div>
+
+      {isAuthenticated ? (
+        <div>
+          <span
+            className="text-[9px] font-medium tracking-[0.15em] uppercase block mb-2"
+            style={{
+              fontFamily: 'var(--font-mono)',
+              color: 'hsl(var(--accent-green))',
+            }}
+          >
+            [ READY ]
+          </span>
+          <p
+            className="text-[12.5px] leading-[1.6]"
+            style={{ color: 'hsl(24 6% 46%)' }}
+          >
+            Open the side panel to view your learning dashboard.
+          </p>
+        </div>
       ) : (
-        <>
-          <p className="text-sm text-muted-foreground mb-3">
+        <div>
+          <span
+            className="text-[9px] font-medium tracking-[0.15em] uppercase block mb-2"
+            style={{
+              fontFamily: 'var(--font-mono)',
+              color: 'hsl(var(--accent-gold))',
+            }}
+          >
+            [ SIGN IN ]
+          </span>
+          <p
+            className="text-[12.5px] leading-[1.6] mb-4"
+            style={{ color: 'hsl(24 6% 46%)' }}
+          >
             Sign in to save explanations and sync across devices.
           </p>
-          <Button
-            size="sm"
-            className="min-h-[44px] w-full"
+          <button
+            className="group flex items-center justify-between w-full h-[42px] rounded-lg px-4 transition-opacity hover:opacity-90"
+            style={{
+              background: 'hsl(24 8% 16%)',
+              color: 'hsl(33 26% 95%)',
+            }}
             onClick={async () => {
-              // Open side panel where the full sign-in flow lives
               const currentWindow = await chrome.windows.getCurrent();
               if (currentWindow.id != null) {
                 chrome.sidePanel.open({ windowId: currentWindow.id });
               }
             }}
           >
-            Sign in with Google
-          </Button>
-        </>
+            <span
+              className="text-[12px] font-medium"
+              style={{ fontFamily: 'var(--font-sans)' }}
+            >
+              Sign in with Google
+            </span>
+            <div
+              className="w-6 h-6 rounded-md flex items-center justify-center transition-transform group-hover:translate-x-0.5"
+              style={{ background: 'hsl(var(--accent-coral))' }}
+            >
+              <ArrowRight className="w-3 h-3 text-white" />
+            </div>
+          </button>
+        </div>
       )}
     </div>
   );
