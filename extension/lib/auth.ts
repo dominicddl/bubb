@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { getSupabase } from './supabase';
 
 export interface AuthResult {
   success: boolean;
@@ -70,7 +70,7 @@ export async function signInWithGoogle(): Promise<AuthResult> {
 
           // Use Supabase native signInWithIdToken — creates a real session
           // with access_token + refresh_token managed by the Supabase client
-          const { data, error } = await supabase.auth.signInWithIdToken({
+          const { data, error } = await getSupabase().auth.signInWithIdToken({
             provider: 'google',
             token: idToken,
             nonce,
@@ -119,7 +119,7 @@ export async function signInWithGoogle(): Promise<AuthResult> {
  */
 export async function signOut(): Promise<AuthResult> {
   try {
-    await supabase.auth.signOut();
+    await getSupabase().auth.signOut();
     await chrome.identity.clearAllCachedAuthTokens();
     return { success: true };
   } catch (err) {
@@ -134,7 +134,7 @@ export async function signOut(): Promise<AuthResult> {
  */
 export async function getAuthState(): Promise<AuthState> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await getSupabase().auth.getSession();
 
     if (!session?.user) {
       return { isAuthenticated: false, user: null };
@@ -159,7 +159,7 @@ export async function getAuthState(): Promise<AuthState> {
  */
 export async function verifyBackendConnection(): Promise<boolean> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await getSupabase().auth.getSession();
     if (!session?.access_token) return false;
 
     const response = await fetch(`${BACKEND_URL}/api/health/auth`, {
