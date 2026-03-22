@@ -9,6 +9,7 @@ export const MessageType = {
   SIGN_OUT: 'SIGN_OUT',
   GET_AUTH_STATE: 'GET_AUTH_STATE',
   AUTH_STATE_CHANGED: 'AUTH_STATE_CHANGED',
+  EXPLAIN_TEXT: 'EXPLAIN_TEXT',
 } as const;
 
 export type MessageTypeValue = (typeof MessageType)[keyof typeof MessageType];
@@ -37,11 +38,28 @@ export interface AuthStateChangedMessage {
   };
 }
 
+export interface ExplainTextMessage {
+  type: typeof MessageType.EXPLAIN_TEXT;
+  payload: {
+    text: string;          // highlighted text
+    context: string;       // surrounding paragraph(s), max ~500 chars
+    sourceUrl: string;     // window.location.href
+    pageTitle: string;     // document.title
+  };
+}
+
+export interface ExplanationResponse {
+  success: boolean;
+  explanation?: string;
+  error?: string;
+}
+
 export type ExtensionMessage =
   | SignInMessage
   | SignOutMessage
   | GetAuthStateMessage
-  | AuthStateChangedMessage;
+  | AuthStateChangedMessage
+  | ExplainTextMessage;
 
 export interface AuthResponse {
   success: boolean;
