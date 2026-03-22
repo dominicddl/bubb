@@ -1,0 +1,8 @@
+{
+  "name": "bubb",
+  "private": true,
+  "version": "0.0.1",
+  "dependencies": {
+    "wxt": "^0.20.20"
+  }
+}
