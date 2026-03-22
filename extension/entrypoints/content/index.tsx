@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { getSelectedTextInfo } from './lib/selection';
 import { extractSurroundingContext } from './lib/context';
 import { calculatePopupPosition } from './lib/positioning';
+import { ExplanationPopup } from './components/ExplanationPopup';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -46,6 +47,8 @@ export default defineContentScript({
       const { text, rect, anchorNode } = selectionInfo;
       const context = extractSurroundingContext(anchorNode);
       const position = calculatePopupPosition(rect);
+      const sourceUrl = window.location.href;
+      const pageTitle = document.title;
 
       currentUi = await createShadowRootUi(ctx, {
         name: 'bubb-popup',
@@ -63,23 +66,16 @@ export default defineContentScript({
           container.append(app);
           const root = ReactDOM.createRoot(app);
 
-          // Placeholder render -- Plan 03 will replace with ExplanationPopup
           root.render(
-            <div style={{
-              position: 'absolute',
-              top: `${position.top}px`,
-              left: `${position.left}px`,
-              width: '400px',
-              maxHeight: '300px',
-            }}>
-              {/* ExplanationPopup will be mounted here in Plan 03 */}
-              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4 shadow-[0_4px_24px_rgba(0,0,0,0.12)]">
-                <p className="text-[14px] font-semibold text-[hsl(var(--foreground))]">
-                  {text.length > 80 ? text.substring(0, 80) + '...' : text}
-                </p>
-                <p className="mt-2 text-[12px] text-[hsl(var(--muted-foreground))]">Loading explanation...</p>
-              </div>
-            </div>
+            <ExplanationPopup
+              selectedText={text}
+              context={context}
+              sourceUrl={sourceUrl}
+              pageTitle={pageTitle}
+              position={position}
+              onClose={() => { currentUi?.remove(); currentUi = null; }}
+              abortSignal={abortController!.signal}
+            />
           );
           return root;
         },
