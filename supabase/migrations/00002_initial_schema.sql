@@ -1,6 +1,6 @@
 -- Topics table (D-10) — must be created before notes due to FK
 CREATE TABLE public.topics (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     note_count INTEGER NOT NULL DEFAULT 0,
@@ -16,10 +16,10 @@ CREATE POLICY "Users can only access own topics"
 
 -- Notes table (D-09, D-12)
 CREATE TABLE public.notes (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE,
     highlighted_text TEXT NOT NULL,
-    explanation TEXT,
+    explanation TEXT NOT NULL,
     source_url TEXT NOT NULL,
     page_title TEXT,
     topic_id UUID REFERENCES public.topics(id) ON DELETE SET NULL,
@@ -36,7 +36,7 @@ CREATE POLICY "Users can only access own notes"
 
 -- User preferences table (D-11, D-08 rolling 24h reset)
 CREATE TABLE public.user_preferences (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
     ai_provider TEXT NOT NULL DEFAULT 'openai',
     daily_usage_count INTEGER NOT NULL DEFAULT 0,
