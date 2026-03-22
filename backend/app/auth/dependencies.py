@@ -6,6 +6,25 @@ from app.config import settings
 security = HTTPBearer(auto_error=False)
 
 
+async def get_optional_user(
+    cred: HTTPAuthorizationCredentials | None = Depends(security),
+) -> dict | None:
+    """Like get_current_user but returns None instead of 401 for unauthenticated requests.
+    Used for preview mode endpoints (D-16) where auth is optional."""
+    if cred is None:
+        return None
+    try:
+        payload = jwt.decode(
+            cred.credentials,
+            settings.supabase_jwt_secret,
+            audience="authenticated",
+            algorithms=["HS256"],
+        )
+        return payload
+    except jwt.PyJWTError:
+        return None
+
+
 async def get_current_user(
     cred: HTTPAuthorizationCredentials = Depends(security),
 ) -> dict:
