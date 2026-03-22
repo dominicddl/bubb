@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+:host {
+  /* Reset inherited styles from host page (per UI-SPEC Shadow DOM Isolation Contract) */
+  all: initial;
+  font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+  /* Normalize rem inside shadow DOM (Pitfall 1: host page font-size varies) */
+  font-size: 16px;
+}
+
+/* Design system variables re-declared for Shadow DOM scope (per UI-SPEC Color section) */
+:root {
+  --background: 33 26% 93%;
+  --foreground: 24 10% 15%;
+  --card: 33 20% 97%;
+  --card-foreground: 24 10% 15%;
+  --border: 33 12% 86%;
+  --muted: 33 12% 90%;
+  --muted-foreground: 24 6% 50%;
+  --accent-green: 142 25% 36%;
+  --accent-coral: 4 58% 58%;
+  --radius: 0.5rem;
+}
