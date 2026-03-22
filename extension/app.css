@@ -1,0 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500&family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: 33 26% 93%;
+    --foreground: 24 10% 15%;
+    --card: 33 20% 97%;
+    --card-foreground: 24 10% 15%;
+    --popover: 33 20% 97%;
+    --popover-foreground: 24 10% 15%;
+    --primary: 24 8% 16%;
+    --primary-foreground: 33 26% 96%;
+    --secondary: 33 15% 90%;
+    --secondary-foreground: 24 8% 16%;
+    --muted: 33 12% 90%;
+    --muted-foreground: 24 6% 50%;
+    --accent: 33 15% 90%;
+    --accent-foreground: 24 8% 16%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 33 12% 86%;
+    --input: 33 12% 86%;
+    --ring: 24 8% 16%;
+    --radius: 0.5rem;
+
+    --accent-green: 142 25% 36%;
+    --accent-green-light: 142 20% 92%;
+    --accent-coral: 4 58% 58%;
+    --accent-coral-light: 4 60% 94%;
+    --accent-gold: 38 60% 52%;
+    --accent-gold-light: 38 50% 92%;
+
+    --font-serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
+    --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  }
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}
