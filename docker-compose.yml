@@ -1,0 +1,13 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app
+    env_file:
+      - .env
+      - backend/.env
+    environment:
+      - SUPABASE_URL=http://host.docker.internal:54321
+    restart: unless-stopped
