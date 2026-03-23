@@ -16,9 +16,15 @@ export class ContentPage {
   constructor(public readonly page: Page) {}
 
   async goto() {
-    await this.page.setContent(TEST_PAGE_HTML);
+    // Navigate to a real URL so the content script's <all_urls> match pattern triggers.
+    // setContent() uses about:blank which doesn't match any content script patterns.
+    await this.page.goto('https://example.com');
+    // Replace body with our test content
+    await this.page.evaluate((html) => {
+      document.body.innerHTML = html;
+    }, '<p id="test-text">Photosynthesis is the process by which plants convert sunlight into energy. This fundamental biological process is essential for life on Earth and involves the absorption of carbon dioxide and water to produce glucose and oxygen.</p>');
     // Wait for content script to inject
-    await this.page.waitForTimeout(1000);
+    await this.page.waitForTimeout(2000);
   }
 
   async gotoUrl(url: string) {
@@ -82,9 +88,9 @@ export class ContentPage {
     }
   }
 
-  /** Shadow DOM locator for the bubb popup */
+  /** Shadow DOM locator for the bubb popup - checks for the visible card, not just the host */
   get popupHost() {
-    return this.page.locator('bubb-popup');
+    return this.page.locator('bubb-popup').locator('.rounded-\\[12px\\]');
   }
 
   /** Locator inside the shadow root */
@@ -101,7 +107,8 @@ export class ContentPage {
   }
 
   get explanationText() {
-    return this.shadowLocator('p[style*="DM Sans"]');
+    // Body explanation: inside the overflow-y-auto container, not the header
+    return this.shadowLocator('.overflow-y-auto p[style*="DM Sans"]');
   }
 
   get headerText() {

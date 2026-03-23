@@ -74,7 +74,7 @@ export class SidePanelPage {
   }
 
   get topicsActionCard() {
-    return this.page.getByText('Topics');
+    return this.page.getByText('Topics', { exact: true });
   }
 
   // Sign out
