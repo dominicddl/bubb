@@ -6,15 +6,33 @@ import dotenv from 'dotenv';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Load extension .env for Supabase URL
+// Lazy-loaded env vars — deferred so importing this module never crashes
 const extensionDir = path.resolve(__dirname, '../..');
 const envPath = path.join(extensionDir, '.env');
-const envVars = dotenv.parse(fs.readFileSync(envPath));
 
-export const SUPABASE_URL = envVars.WXT_SUPABASE_URL;
+let cachedEnv: Record<string, string> | null = null;
+
+function loadEnv(): Record<string, string> {
+  if (cachedEnv) return cachedEnv;
+  if (!fs.existsSync(envPath)) {
+    throw new Error(
+      `Missing ${envPath} — create it from .env.example before running E2E tests.`,
+    );
+  }
+  cachedEnv = dotenv.parse(fs.readFileSync(envPath));
+  return cachedEnv;
+}
+
+export function getSupabaseUrl(): string {
+  const url = loadEnv().WXT_SUPABASE_URL;
+  if (!url) {
+    throw new Error('WXT_SUPABASE_URL is not set in extension/.env');
+  }
+  return url;
+}
 
 export function getSupabaseStorageKey(): string {
-  const url = new URL(SUPABASE_URL);
+  const url = new URL(getSupabaseUrl());
   const ref = url.hostname.split('.')[0];
   return `sb-${ref}-auth-token`;
 }

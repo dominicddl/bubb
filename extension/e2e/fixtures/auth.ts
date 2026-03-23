@@ -1,8 +1,6 @@
 import type { Worker } from '@playwright/test';
 import { getSupabaseStorageKey } from './extension';
 
-const STORAGE_KEY = getSupabaseStorageKey();
-
 export function createMockSession(overrides?: Record<string, unknown>) {
   return JSON.stringify({
     access_token: 'fake-jwt-for-testing',
@@ -23,20 +21,22 @@ export function createMockSession(overrides?: Record<string, unknown>) {
 }
 
 export async function injectAuthSession(sw: Worker, session?: string) {
+  const storageKey = getSupabaseStorageKey();
   const mockSession = session ?? createMockSession();
   await sw.evaluate(
     ({ key, value }) => {
       (chrome.storage.local as any).set({ [key]: value });
     },
-    { key: STORAGE_KEY, value: mockSession },
+    { key: storageKey, value: mockSession },
   );
 }
 
 export async function clearAuthSession(sw: Worker) {
+  const storageKey = getSupabaseStorageKey();
   await sw.evaluate(
     ({ key }) => {
       (chrome.storage.local as any).remove(key);
     },
-    { key: STORAGE_KEY },
+    { key: storageKey },
   );
 }
