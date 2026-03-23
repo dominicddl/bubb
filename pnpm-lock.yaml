@@ -63,6 +63,9 @@ importers:
       '@wxt-dev/module-react':
         specifier: ^1.2.2
         version: 1.2.2(vite@8.0.1(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1))(wxt@0.20.20(@types/node@25.5.0)(jiti@2.6.1))
+      dotenv:
+        specifier: ^17.3.1
+        version: 17.3.1
       happy-dom:
         specifier: ^20.8.4
         version: 20.8.4
