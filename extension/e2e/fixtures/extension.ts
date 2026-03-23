@@ -31,6 +31,8 @@ export const test = base.extend<ExtensionFixtures>({
     const extensionPath = path.resolve(__dirname, '../../.output/chrome-mv3');
     const context = await chromium.launchPersistentContext('', {
       headless: false,
+      // Uncomment to slow down tests for visual debugging:
+      // slowMo: 1000,
       args: [
         `--disable-extensions-except=${extensionPath}`,
         `--load-extension=${extensionPath}`,
