@@ -15,6 +15,7 @@ test.describe('Smoke: Real Google OAuth', () => {
   test.skip(!GOOGLE_EMAIL || !GOOGLE_PASSWORD, 'Skipped: GOOGLE_TEST_EMAIL or GOOGLE_TEST_PASSWORD not set in .env.test');
 
   test('sign in with real Google account', async ({ context, extensionId }) => {
+    test.setTimeout(120000); // Google OAuth can be slow
     const page = await context.newPage();
     const panel = new SidePanelPage(page, extensionId);
     await panel.goto();
