@@ -21,6 +21,7 @@ export default defineConfig({
     {
       name: 'smoke',
       testDir: './specs/smoke',
+      testMatch: '**/*.smoke.ts',
     },
   ],
 });
