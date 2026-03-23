@@ -1,7 +1,10 @@
 import { test as base, chromium, type BrowserContext, type Worker } from '@playwright/test';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Load extension .env for Supabase URL
 const extensionDir = path.resolve(__dirname, '../..');
