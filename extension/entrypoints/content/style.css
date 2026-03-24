@@ -19,5 +19,14 @@
   --muted-foreground: 24 6% 50%;
   --accent-green: 142 25% 36%;
   --accent-coral: 4 58% 58%;
+  --accent-coral-light: 4 60% 94%;
+  --primary: 24 8% 16%;
+  --primary-foreground: 33 26% 96%;
+  --input: 33 12% 86%;
   --radius: 0.5rem;
+}
+
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
