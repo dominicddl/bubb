@@ -1,6 +1,6 @@
 import { signInWithGoogle, signOut, getAuthState, verifyBackendConnection } from '@/lib/auth';
-import type { ExtensionMessage, AuthResponse, ExplainTextMessage } from '@/lib/messaging';
-import { MessageType } from '@/lib/messaging';
+import type { ExtensionMessage, AuthResponse, ExplainTextMessage, StreamRequestPayload, StreamPortMessage } from '@/lib/messaging';
+import { MessageType, STREAM_PORT_NAME } from '@/lib/messaging';
 import { getSupabase } from '@/lib/supabase';
 
 export default defineBackground({
@@ -16,6 +16,114 @@ export default defineBackground({
 
     chrome.runtime.onInstalled.addListener(() => {
       console.log('[bubb] Extension installed');
+    });
+
+    chrome.runtime.onConnect.addListener((port) => {
+      if (port.name !== STREAM_PORT_NAME) return;
+
+      // Track active readers so we can cancel on disconnect
+      const activeReaders: ReadableStreamDefaultReader<Uint8Array>[] = [];
+      let disconnected = false;
+
+      port.onDisconnect.addListener(() => {
+        disconnected = true;
+        for (const reader of activeReaders) {
+          reader.cancel().catch(() => {});
+        }
+        activeReaders.length = 0;
+      });
+
+      port.onMessage.addListener(async (msg: { type: string; payload: StreamRequestPayload }) => {
+        if (msg.type !== 'STREAM_REQUEST') return;
+
+        const payload = msg.payload;
+        const BACKEND_URL = import.meta.env.WXT_BACKEND_URL || 'http://127.0.0.1:8000';
+
+        try {
+          const { data: { session } } = await getSupabase().auth.getSession();
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          if (session?.access_token) {
+            headers['Authorization'] = `Bearer ${session.access_token}`;
+          }
+
+          const resp = await fetch(`${BACKEND_URL}/api/explain/stream`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              text: payload.text,
+              context: payload.context,
+              source_url: payload.sourceUrl,
+              page_title: payload.pageTitle,
+              depth: payload.depth,
+              provider: payload.provider,
+              conversation_history: payload.conversationHistory?.map(t => ({
+                question: t.question,
+                answer: t.answer,
+              })) ?? [],
+              follow_up_question: payload.followUpQuestion ?? null,
+            }),
+          });
+
+          if (!resp.ok || !resp.body) {
+            if (!disconnected) {
+              port.postMessage({
+                type: 'STREAM_ERROR',
+                depth: payload.depth,
+                error: `API error: ${resp.status}`,
+              } satisfies StreamPortMessage);
+            }
+            return;
+          }
+
+          const reader = resp.body.getReader();
+          activeReaders.push(reader);
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done || disconnected) break;
+
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() ?? '';
+
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  const token = line.slice(6);
+                  if (token === '[DONE]') continue;
+                  if (!disconnected) {
+                    port.postMessage({
+                      type: 'STREAM_CHUNK',
+                      depth: payload.depth,
+                      token,
+                    } satisfies StreamPortMessage);
+                  }
+                }
+              }
+            }
+
+            if (!disconnected) {
+              port.postMessage({
+                type: 'STREAM_END',
+                depth: payload.depth,
+              } satisfies StreamPortMessage);
+            }
+          } finally {
+            const idx = activeReaders.indexOf(reader);
+            if (idx >= 0) activeReaders.splice(idx, 1);
+          }
+        } catch (err) {
+          if (!disconnected) {
+            port.postMessage({
+              type: 'STREAM_ERROR',
+              depth: payload.depth,
+              error: err instanceof Error ? err.message : 'Network error',
+            } satisfies StreamPortMessage);
+          }
+        }
+      });
     });
   },
 });
