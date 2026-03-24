@@ -8,6 +8,7 @@ dist/
 .env
 .env.local
 .env.*.local
+.env.test
 
 # Python
 __pycache__/
@@ -28,3 +29,6 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# E2E test environment
+extension/.env.test
