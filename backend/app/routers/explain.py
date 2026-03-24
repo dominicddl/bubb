@@ -1,11 +1,19 @@
+from collections.abc import AsyncIterable
+
 from fastapi import APIRouter, Depends
+from fastapi.sse import EventSourceResponse, ServerSentEvent
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 from google import genai
 
 from app.auth.dependencies import get_optional_user
 from app.config import settings
-from app.models.explain import ExplainRequest, ExplainResponse, Provider
+from app.models.explain import (
+    ExplainRequest,
+    ExplainResponse,
+    Provider,
+    StreamExplainRequest,
+)
 
 router = APIRouter()
 
@@ -71,6 +79,124 @@ PROVIDERS = {
     "openai": _call_openai,
     "google": _call_google,
 }
+
+
+_NO_MARKDOWN = (
+    "IMPORTANT: Write in plain text only. Do NOT use any markdown formatting whatsoever — "
+    "no headers (#), no bold (**), no italics (*), no bullet points, no numbered lists, no code blocks. "
+    "Just plain sentences and paragraphs."
+)
+
+DEPTH_SYSTEM_PROMPTS: dict[str, str] = {
+    "simple": (
+        "You are a helpful explainer for beginners. Explain the highlighted text as if talking "
+        "to a curious 10-year-old. Use simple words, analogies, and no jargon. "
+        f"Keep your explanation under 50 words. {_NO_MARKDOWN}"
+    ),
+    "standard": (
+        "You are a helpful explainer. Explain the highlighted text at an undergraduate textbook "
+        "level. Use clear language, define key terms briefly. Keep your explanation under 150 words. "
+        f"{_NO_MARKDOWN}"
+    ),
+    "deep": (
+        "You are an expert explaining to a domain expert. Use technical terminology, reference "
+        "relevant concepts and frameworks, assume prior knowledge. Keep your explanation under "
+        f"250 words. {_NO_MARKDOWN}"
+    ),
+}
+
+
+async def _stream_openai(user_prompt: str, system_prompt: str) -> AsyncIterable[str]:
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    stream = await client.chat.completions.create(
+        model=MODELS["openai"],
+        temperature=0.3,
+        max_tokens=400,
+        stream=True,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+    async for chunk in stream:
+        token = chunk.choices[0].delta.content
+        if token is not None:
+            yield token
+
+
+async def _stream_anthropic(user_prompt: str, system_prompt: str) -> AsyncIterable[str]:
+    client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+    async with client.messages.stream(
+        model=MODELS["anthropic"],
+        max_tokens=400,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_prompt}],
+    ) as stream:
+        async for token in stream.text_stream:
+            yield token
+
+
+async def _stream_google(user_prompt: str, system_prompt: str) -> AsyncIterable[str]:
+    client = genai.Client(api_key=settings.gemini_api_key)
+    response = await client.aio.models.generate_content(
+        model=MODELS["google"],
+        contents=f"{system_prompt}\n\n{user_prompt}",
+    )
+    yield response.text or ""
+
+
+STREAM_PROVIDERS: dict[str, object] = {
+    "openai": _stream_openai,
+    "anthropic": _stream_anthropic,
+    "google": _stream_google,
+}
+
+
+def _build_stream_user_prompt(body: StreamExplainRequest) -> str:
+    return (
+        f"Page: {body.page_title}\n\n"
+        f"Surrounding context:\n{body.context}\n\n"
+        f"Highlighted text:\n{body.text}\n\n"
+        "Explain what the highlighted text means in this context."
+    )
+
+
+@router.post("/explain/stream", response_class=EventSourceResponse)
+async def stream_explain(
+    body: StreamExplainRequest,
+    user: dict | None = Depends(get_optional_user),
+) -> AsyncIterable[ServerSentEvent]:
+    """Stream AI explanation as SSE tokens for depth-level prompts and follow-up conversations."""
+    provider: Provider = body.provider or settings.default_ai_provider  # type: ignore[assignment]
+    system_prompt = DEPTH_SYSTEM_PROMPTS[body.depth]
+    user_prompt = _build_stream_user_prompt(body)
+
+    if body.follow_up_question:
+        if body.conversation_history:
+            history_text = "\n".join(
+                f"Q: {turn.question}\nA: {turn.answer}"
+                for turn in body.conversation_history
+            )
+            user_prompt = (
+                f"Context — the user highlighted this text on a webpage:\n{body.text}\n\n"
+                f"Prior conversation:\n{history_text}\n\n"
+                f"The user now asks: {body.follow_up_question}\n\n"
+                "Answer the follow-up question directly. Do not repeat your previous explanation."
+            )
+        else:
+            user_prompt = (
+                f"Context — the user highlighted this text on a webpage:\n{body.text}\n\n"
+                f"The user asks: {body.follow_up_question}\n\n"
+                "Answer the question directly."
+            )
+
+    stream_fn = STREAM_PROVIDERS[provider]
+    try:
+        async for token in stream_fn(user_prompt, system_prompt):  # type: ignore[call-arg]
+            yield ServerSentEvent(raw_data=token)
+    except Exception as exc:
+        # Surface provider errors to the client so the UI can display them
+        yield ServerSentEvent(raw_data=f"[ERROR] {exc}")
 
 
 @router.post("/explain", response_model=ExplainResponse)
