@@ -81,21 +81,27 @@ PROVIDERS = {
 }
 
 
+_NO_MARKDOWN = (
+    "IMPORTANT: Write in plain text only. Do NOT use any markdown formatting whatsoever — "
+    "no headers (#), no bold (**), no italics (*), no bullet points, no numbered lists, no code blocks. "
+    "Just plain sentences and paragraphs."
+)
+
 DEPTH_SYSTEM_PROMPTS: dict[str, str] = {
     "simple": (
         "You are a helpful explainer for beginners. Explain the highlighted text as if talking "
         "to a curious 10-year-old. Use simple words, analogies, and no jargon. "
-        "Keep your explanation under 50 words."
+        f"Keep your explanation under 50 words. {_NO_MARKDOWN}"
     ),
     "standard": (
         "You are a helpful explainer. Explain the highlighted text at an undergraduate textbook "
         "level. Use clear language, define key terms briefly. Keep your explanation under 150 words. "
-        "No bullet points or markdown."
+        f"{_NO_MARKDOWN}"
     ),
     "deep": (
         "You are an expert explaining to a domain expert. Use technical terminology, reference "
         "relevant concepts and frameworks, assume prior knowledge. Keep your explanation under "
-        "250 words. No bullet points or markdown."
+        f"250 words. {_NO_MARKDOWN}"
     ),
 }
 
@@ -165,20 +171,32 @@ async def stream_explain(
     system_prompt = DEPTH_SYSTEM_PROMPTS[body.depth]
     user_prompt = _build_stream_user_prompt(body)
 
-    if body.follow_up_question and body.conversation_history:
-        history_text = "\n".join(
-            f"Q: {turn.question}\nA: {turn.answer}"
-            for turn in body.conversation_history
-        )
-        user_prompt = (
-            f"Prior conversation:\n{history_text}\n\n"
-            f"Original context:\n{user_prompt}\n\n"
-            f"Follow-up: {body.follow_up_question}"
-        )
+    if body.follow_up_question:
+        if body.conversation_history:
+            history_text = "\n".join(
+                f"Q: {turn.question}\nA: {turn.answer}"
+                for turn in body.conversation_history
+            )
+            user_prompt = (
+                f"Context — the user highlighted this text on a webpage:\n{body.text}\n\n"
+                f"Prior conversation:\n{history_text}\n\n"
+                f"The user now asks: {body.follow_up_question}\n\n"
+                "Answer the follow-up question directly. Do not repeat your previous explanation."
+            )
+        else:
+            user_prompt = (
+                f"Context — the user highlighted this text on a webpage:\n{body.text}\n\n"
+                f"The user asks: {body.follow_up_question}\n\n"
+                "Answer the question directly."
+            )
 
     stream_fn = STREAM_PROVIDERS[provider]
-    async for token in stream_fn(user_prompt, system_prompt):  # type: ignore[call-arg]
-        yield ServerSentEvent(raw_data=token)
+    try:
+        async for token in stream_fn(user_prompt, system_prompt):  # type: ignore[call-arg]
+            yield ServerSentEvent(raw_data=token)
+    except Exception as exc:
+        # Surface provider errors to the client so the UI can display them
+        yield ServerSentEvent(raw_data=f"[ERROR] {exc}")
 
 
 @router.post("/explain", response_model=ExplainResponse)

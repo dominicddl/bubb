@@ -4,6 +4,12 @@ import { getSelectedTextInfo } from './lib/selection';
 import { extractSurroundingContext } from './lib/context';
 import { calculatePopupPosition } from './lib/positioning';
 import { ExplanationPopup } from './components/ExplanationPopup';
+import type { DepthLevel } from '@/lib/messaging';
+
+type DepthCache = Record<DepthLevel, string>;
+
+// Cache explanations so re-highlighting the same text reuses previous results
+const explanationCache = new Map<string, DepthCache>();
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -61,6 +67,11 @@ export default defineContentScript({
             container.append(app);
             const root = ReactDOM.createRoot(app);
 
+            const cachedResult = explanationCache.get(text);
+            const handleCacheUpdate = (cache: DepthCache) => {
+              explanationCache.set(text, cache);
+            };
+
             root.render(
               <ExplanationPopup
                 selectedText={text}
@@ -69,6 +80,8 @@ export default defineContentScript({
                 pageTitle={pageTitle}
                 position={position}
                 onClose={closePopup}
+                initialCache={cachedResult}
+                onCacheUpdate={handleCacheUpdate}
               />
             );
             return root;

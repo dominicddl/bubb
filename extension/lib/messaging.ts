@@ -10,6 +10,7 @@ export const MessageType = {
   GET_AUTH_STATE: 'GET_AUTH_STATE',
   AUTH_STATE_CHANGED: 'AUTH_STATE_CHANGED',
   EXPLAIN_TEXT: 'EXPLAIN_TEXT',
+  RENDER_LATEX: 'RENDER_LATEX',
 } as const;
 
 export type MessageTypeValue = (typeof MessageType)[keyof typeof MessageType];
@@ -54,12 +55,25 @@ export interface ExplanationResponse {
   error?: string;
 }
 
+export interface RenderLatexMessage {
+  type: typeof MessageType.RENDER_LATEX;
+  payload: { text: string };
+}
+
+export interface RenderLatexResponse {
+  success: boolean;
+  html?: string;
+  css?: string;
+  error?: string;
+}
+
 export type ExtensionMessage =
   | SignInMessage
   | SignOutMessage
   | GetAuthStateMessage
   | AuthStateChangedMessage
-  | ExplainTextMessage;
+  | ExplainTextMessage
+  | RenderLatexMessage;
 
 export interface AuthResponse {
   success: boolean;

@@ -1,3 +1,5 @@
+import { LatexText } from './LatexText';
+
 interface ChatMessageProps {
   text: string;
   isStreaming: boolean;
@@ -17,7 +19,7 @@ export function ChatMessage({ text, isStreaming, role }: ChatMessageProps) {
 
   return (
     <div className="text-[14px] leading-[1.6] text-[hsl(var(--foreground))]">
-      {text}
+      <LatexText text={text} isStreaming={isStreaming} />
       {isStreaming && (
         <span
           className="inline-block w-[2px] h-[14px] bg-[hsl(var(--foreground))] ml-[1px]"

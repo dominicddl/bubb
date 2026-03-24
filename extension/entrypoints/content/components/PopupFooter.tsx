@@ -1,13 +1,7 @@
 import { useState } from 'react';
 import { ArrowUp } from 'lucide-react';
 import type { Provider } from '@/lib/messaging';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { ProviderDropdown } from './ProviderDropdown';
 
 interface PopupFooterProps {
   onSendFollowUp: (question: string) => void;
@@ -40,7 +34,7 @@ export function PopupFooter({
 
   return (
     <div className="flex items-center gap-[8px] border-t border-[hsl(var(--border))] px-[16px] py-[8px]">
-      {!followUpCapReached && (
+      {!followUpCapReached ? (
         <>
           <input
             type="text"
@@ -64,21 +58,14 @@ export function PopupFooter({
             <ArrowUp className="w-[16px] h-[16px]" />
           </button>
         </>
+      ) : (
+        <span className="flex-1 text-[11px] text-[hsl(var(--muted-foreground))]">Follow-up limit reached</span>
       )}
-      <Select
-        value={activeProvider}
-        onValueChange={(v) => onProviderChange(v as Provider)}
+      <ProviderDropdown
+        activeProvider={activeProvider}
+        onProviderChange={onProviderChange}
         disabled={isStreaming}
-      >
-        <SelectTrigger className="h-[24px] w-auto border-0 bg-transparent px-[4px] text-[12px] text-[hsl(var(--muted-foreground))] shadow-none focus:ring-0">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="openai">GPT-4o mini</SelectItem>
-          <SelectItem value="anthropic">Claude Haiku</SelectItem>
-          <SelectItem value="google">Gemini Flash</SelectItem>
-        </SelectContent>
-      </Select>
+      />
     </div>
   );
 }

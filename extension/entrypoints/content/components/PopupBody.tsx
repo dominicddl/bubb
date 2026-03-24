@@ -1,4 +1,5 @@
 import { SkeletonLoader } from './SkeletonLoader';
+import { LatexText } from './LatexText';
 
 interface PopupBodyProps {
   explanationText: string;
@@ -21,19 +22,19 @@ export function PopupBody({ explanationText, isStreaming, error, isLoading }: Po
       )}
       {explanationText && (
         <>
-          <p
+          <div
             className="text-[14px] leading-[1.6] text-[hsl(var(--foreground))]"
             style={{ fontFamily: "'DM Sans', system-ui, -apple-system, sans-serif" }}
           >
-            {explanationText}
-            {isStreaming && (
-              <span
-                className="inline-block w-[2px] h-[14px] bg-[hsl(var(--foreground))] ml-[1px] align-middle"
-                style={{ animation: 'blink-cursor 1s step-end infinite' }}
-                aria-hidden="true"
-              />
-            )}
-          </p>
+            <LatexText text={explanationText} isStreaming={isStreaming} />
+          </div>
+          {isStreaming && (
+            <span
+              className="inline-block w-[2px] h-[14px] bg-[hsl(var(--foreground))] ml-[1px] align-middle"
+              style={{ animation: 'blink-cursor 1s step-end infinite' }}
+              aria-hidden="true"
+            />
+          )}
           {error && (
             <p className="mt-[4px] text-[12px] text-[hsl(var(--muted-foreground))]">
               Something went wrong. Retry explanation?
