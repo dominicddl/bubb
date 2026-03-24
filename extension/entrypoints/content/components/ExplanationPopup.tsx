@@ -19,23 +19,25 @@ interface ExplanationPopupProps {
   position: { top: number; left: number };
   onClose: () => void;
   abortSignal?: AbortSignal;
+  initialCache?: Record<DepthLevel, string>;
+  onCacheUpdate?: (cache: Record<DepthLevel, string>) => void;
 }
 
 export function ExplanationPopup({
-  selectedText, context, sourceUrl, pageTitle, position, onClose, abortSignal
+  selectedText, context, sourceUrl, pageTitle, position, onClose, abortSignal,
+  initialCache, onCacheUpdate,
 }: ExplanationPopupProps) {
+  const hasCachedResult = initialCache && Object.values(initialCache).some(v => v.length > 0);
   const [activeDepth, setActiveDepth] = useState<DepthLevel>('simple');
   const [activeProvider, setActiveProvider] = useState<Provider>('openai');
-  const [depthCache, setDepthCache] = useState<Record<DepthLevel, string>>({
-    simple: '',
-    standard: '',
-    deep: '',
-  });
-  const [depthStreaming, setDepthStreaming] = useState<Record<DepthLevel, boolean>>({
-    simple: true,
-    standard: true,
-    deep: true,
-  });
+  const [depthCache, setDepthCache] = useState<Record<DepthLevel, string>>(
+    hasCachedResult ? initialCache : { simple: '', standard: '', deep: '' },
+  );
+  const [depthStreaming, setDepthStreaming] = useState<Record<DepthLevel, boolean>>(
+    hasCachedResult
+      ? { simple: !initialCache.simple, standard: !initialCache.standard, deep: !initialCache.deep }
+      : { simple: true, standard: true, deep: true },
+  );
   const [depthErrors, setDepthErrors] = useState<Record<DepthLevel, string | null>>({
     simple: null,
     standard: null,
@@ -45,6 +47,7 @@ export function ExplanationPopup({
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [noteId, setNoteId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState(false);
+  const saveAttemptedRef = useRef(false);
 
   const streamPortRef = useRef<StreamPort | null>(null);
   const followUpDepthRef = useRef<DepthLevel | null>(null);
@@ -80,12 +83,22 @@ export function ExplanationPopup({
     };
   }, [resetDismissTimer]);
 
-  // Auto-scroll on new content
+  // Auto-scroll on new content (use scrollTop, not scrollIntoView — the latter
+  // scrolls ALL ancestor containers including the host page, causing the page to jump)
   useEffect(() => {
-    if (!userScrolledUpRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = scrollContainerRef.current;
+    if (!userScrolledUpRef.current && container) {
+      container.scrollTop = container.scrollHeight;
     }
   }, [depthCache, thread]);
+
+  // When switching depths, always scroll to bottom so user sees the chat thread
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [activeDepth]);
 
   // Track user scroll
   useEffect(() => {
@@ -167,9 +180,9 @@ export function ExplanationPopup({
     return streamPort;
   }, [selectedText, context, sourceUrl, pageTitle]);
 
-  // Initial port lifecycle
+  // Initial port lifecycle — skip if we have cached results
   useEffect(() => {
-    if (abortSignal?.aborted) return;
+    if (abortSignal?.aborted || hasCachedResult) return;
 
     const streamPort = openPort(activeProvider);
 
@@ -182,9 +195,19 @@ export function ExplanationPopup({
     };
   }, [selectedText]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Persist completed explanations to external cache
+  useEffect(() => {
+    const allDone = !depthStreaming.simple && !depthStreaming.standard && !depthStreaming.deep;
+    const hasContent = depthCache.simple || depthCache.standard || depthCache.deep;
+    if (allDone && hasContent && onCacheUpdate) {
+      onCacheUpdate(depthCache);
+    }
+  }, [depthStreaming, depthCache, onCacheUpdate]);
+
   // Auto-save after simple explanation finishes streaming
   useEffect(() => {
-    if (!depthStreaming.simple && depthCache.simple.length > 0 && !noteId && !saveError) {
+    if (!depthStreaming.simple && depthCache.simple.length > 0 && !saveAttemptedRef.current) {
+      saveAttemptedRef.current = true;
       const saveNote = async () => {
         try {
           const { data: { session } } = await getSupabase().auth.getSession();
@@ -247,9 +270,16 @@ export function ExplanationPopup({
     if (!streamPortRef.current) return;
 
     const currentDepth = activeDepth;
-    const completedTurns = thread
+    // Always include the initial explanation as the first conversation turn
+    // so the AI knows what it already told the user and avoids repeating itself
+    const initialTurn: ConversationTurn = {
+      question: selectedText,
+      answer: depthCache[currentDepth],
+    };
+    const priorTurns = thread
       .filter(t => !t.isStreaming)
       .map(({ question, answer }) => ({ question, answer }));
+    const completedTurns = [initialTurn, ...priorTurns];
 
     // Add new turn
     setThread(prev => [...prev, { question: inputText, answer: '', isStreaming: true }]);
@@ -327,7 +357,6 @@ export function ExplanationPopup({
         <DepthToggle
           activeDepth={activeDepth}
           onDepthChange={handleDepthChange}
-          loadingDepths={depthStreaming}
           errorDepths={depthErrors}
         />
         <div
@@ -357,7 +386,7 @@ export function ExplanationPopup({
           activeProvider={activeProvider}
           onProviderChange={handleProviderChange}
         />
-        {!depthStreaming.simple && depthCache.simple && (
+        {saveAttemptedRef.current && (noteId || saveError || !isSignedIn) && (
           <SaveToast
             noteId={noteId}
             isSignedIn={isSignedIn}

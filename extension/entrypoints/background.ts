@@ -1,6 +1,8 @@
 import { signInWithGoogle, signOut, getAuthState, verifyBackendConnection } from '@/lib/auth';
-import type { ExtensionMessage, AuthResponse, ExplainTextMessage, StreamRequestPayload, StreamPortMessage } from '@/lib/messaging';
+import type { ExtensionMessage, AuthResponse, ExplainTextMessage, RenderLatexMessage, RenderLatexResponse, StreamRequestPayload, StreamPortMessage } from '@/lib/messaging';
 import { MessageType, STREAM_PORT_NAME } from '@/lib/messaging';
+import katex from 'katex';
+import katexCss from 'katex/dist/katex.min.css?inline';
 import { getSupabase } from '@/lib/supabase';
 
 export default defineBackground({
@@ -90,15 +92,27 @@ export default defineBackground({
               buffer = lines.pop() ?? '';
 
               for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                  const token = line.slice(6);
+                if (line.startsWith('data:')) {
+                  // SSE data field: "data: token" or "data:" (empty = newline)
+                  const raw = line.slice(5);
+                  const token = raw.startsWith(' ') ? raw.slice(1) : raw;
                   if (token === '[DONE]') continue;
+                  // Empty data lines represent newlines in the original text
+                  const resolved = token === '' ? '\n' : token;
                   if (!disconnected) {
-                    port.postMessage({
-                      type: 'STREAM_CHUNK',
-                      depth: payload.depth,
-                      token,
-                    } satisfies StreamPortMessage);
+                    if (resolved.startsWith('[ERROR]')) {
+                      port.postMessage({
+                        type: 'STREAM_ERROR',
+                        depth: payload.depth,
+                        error: resolved.slice(8),
+                      } satisfies StreamPortMessage);
+                    } else {
+                      port.postMessage({
+                        type: 'STREAM_CHUNK',
+                        depth: payload.depth,
+                        token: resolved,
+                      } satisfies StreamPortMessage);
+                    }
                   }
                 }
               }
@@ -196,6 +210,17 @@ async function handleMessage(message: ExtensionMessage): Promise<AuthResponse> {
       };
     }
 
+    case MessageType.RENDER_LATEX: {
+      const { text } = (message as RenderLatexMessage).payload;
+      try {
+        const html = renderLatexText(text);
+        return { success: true, html, css: getKatexCss() } as unknown as AuthResponse;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Render error';
+        return { success: false, error: msg };
+      }
+    }
+
     case MessageType.EXPLAIN_TEXT: {
       const { text, context, sourceUrl, pageTitle } = (message as ExplainTextMessage).payload;
       const BACKEND_URL = import.meta.env.WXT_BACKEND_URL || 'http://127.0.0.1:8000';
@@ -235,4 +260,49 @@ async function handleMessage(message: ExtensionMessage): Promise<AuthResponse> {
     default:
       return { success: false, error: 'Unknown message type' };
   }
+}
+
+// --- LaTeX rendering helpers ---
+
+const LATEX_PATTERN = /\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)|\$\$([\s\S]*?)\$\$|\$([^\$\n]+?)\$/g;
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function renderLatexText(text: string): string {
+  const regex = new RegExp(LATEX_PATTERN.source, 'g');
+  let lastIndex = 0;
+  let result = '';
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    result += escapeHtml(text.slice(lastIndex, match.index));
+
+    const [fullMatch, display1, inline1, display2, inline2] = match;
+    const isDisplay = display1 != null || display2 != null;
+    const latex = display1 ?? inline1 ?? display2 ?? inline2 ?? '';
+
+    try {
+      result += katex.renderToString(latex, {
+        displayMode: isDisplay,
+        throwOnError: false,
+        output: 'html',
+      });
+    } catch {
+      result += escapeHtml(fullMatch);
+    }
+    lastIndex = regex.lastIndex;
+  }
+
+  result += escapeHtml(text.slice(lastIndex));
+  return result;
+}
+
+function getKatexCss(): string {
+  return katexCss;
 }
