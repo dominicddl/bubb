@@ -71,3 +71,51 @@ export interface AuthResponse {
   } | null;
   isAuthenticated?: boolean;
 }
+
+// --- Streaming protocol types ---
+
+export type DepthLevel = 'simple' | 'standard' | 'deep';
+
+export type Provider = 'openai' | 'anthropic' | 'google';
+
+export interface ConversationTurn {
+  question: string;
+  answer: string;
+}
+
+export interface StreamRequestPayload {
+  text: string;
+  context: string;
+  sourceUrl: string;
+  pageTitle: string;
+  depth: DepthLevel;
+  provider: Provider;
+  conversationHistory?: ConversationTurn[];
+  followUpQuestion?: string;
+}
+
+export interface StreamRequestMessage {
+  type: 'STREAM_REQUEST';
+  payload: StreamRequestPayload;
+}
+
+export interface StreamChunkMessage {
+  type: 'STREAM_CHUNK';
+  depth: DepthLevel;
+  token: string;
+}
+
+export interface StreamEndMessage {
+  type: 'STREAM_END';
+  depth: DepthLevel;
+}
+
+export interface StreamErrorMessage {
+  type: 'STREAM_ERROR';
+  depth: DepthLevel;
+  error: string;
+}
+
+export type StreamPortMessage = StreamChunkMessage | StreamEndMessage | StreamErrorMessage;
+
+export const STREAM_PORT_NAME = 'bubb-stream';
