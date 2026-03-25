@@ -11,6 +11,8 @@ export const MessageType = {
   AUTH_STATE_CHANGED: 'AUTH_STATE_CHANGED',
   EXPLAIN_TEXT: 'EXPLAIN_TEXT',
   RENDER_LATEX: 'RENDER_LATEX',
+  NOTE_SAVED: 'NOTE_SAVED',
+  TOPIC_ASSIGNED: 'TOPIC_ASSIGNED',
 } as const;
 
 export type MessageTypeValue = (typeof MessageType)[keyof typeof MessageType];
@@ -67,13 +69,25 @@ export interface RenderLatexResponse {
   error?: string;
 }
 
+export interface NoteSavedMessage {
+  type: typeof MessageType.NOTE_SAVED;
+  payload: { noteId: string };
+}
+
+export interface TopicAssignedMessage {
+  type: typeof MessageType.TOPIC_ASSIGNED;
+  payload: { noteId: string; topicId: string };
+}
+
 export type ExtensionMessage =
   | SignInMessage
   | SignOutMessage
   | GetAuthStateMessage
   | AuthStateChangedMessage
   | ExplainTextMessage
-  | RenderLatexMessage;
+  | RenderLatexMessage
+  | NoteSavedMessage
+  | TopicAssignedMessage;
 
 export interface AuthResponse {
   success: boolean;

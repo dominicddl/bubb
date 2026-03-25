@@ -20,6 +20,7 @@
     "@radix-ui/react-separator": "^1.1.8",
     "@radix-ui/react-slot": "^1.2.4",
     "@supabase/supabase-js": "^2.99.3",
+    "@tanstack/react-query": "^5.95.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "katex": "^0.16.40",
@@ -27,7 +28,8 @@
     "radix-ui": "^1.4.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "tailwind-merge": "^3.5.0"
+    "tailwind-merge": "^3.5.0",
+    "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.8",
@@ -36,7 +38,6 @@
     "@types/katex": "^0.16.8",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
-    "@vitest/coverage-v8": "^4.1.0",
     "@vitest/coverage-v8": "^4.1.0",
     "@wxt-dev/module-react": "^1.2.2",
     "happy-dom": "^20.8.4",
