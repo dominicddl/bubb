@@ -8,6 +8,9 @@ import { getSupabase } from '@/lib/supabase';
 export default defineBackground({
   type: 'module',
   main() {
+    // Open side panel when extension icon is clicked (retires the popup per PANEL-01, D-03)
+    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+
     // CRITICAL: Register ALL listeners synchronously (Pitfall 4)
     chrome.runtime.onMessage.addListener(
       (message: ExtensionMessage, _sender, sendResponse: (response: AuthResponse) => void) => {
