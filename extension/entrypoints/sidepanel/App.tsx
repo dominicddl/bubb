@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { MessageType } from '@/lib/messaging';
-import type { AuthResponse, AuthStateChangedMessage } from '@/lib/messaging';
+import type { AuthResponse, AuthStateChangedMessage, ExtensionMessage } from '@/lib/messaging';
 import { SignedOutView } from './components/SignedOutView';
 import { SignedInView } from './components/SignedInView';
 import { AuthErrorBanner } from './components/AuthErrorBanner';
@@ -18,6 +19,8 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const queryClient = useQueryClient();
 
   // Check auth state on mount
   useEffect(() => {
@@ -49,6 +52,20 @@ function App() {
     chrome.runtime.onMessage.addListener(listener);
     return () => chrome.runtime.onMessage.removeListener(listener);
   }, []);
+
+  // Invalidate React Query caches when notes or topics change
+  useEffect(() => {
+    const listener = (message: ExtensionMessage) => {
+      if (message.type === MessageType.NOTE_SAVED) {
+        queryClient.invalidateQueries({ queryKey: ['notes'] });
+        queryClient.invalidateQueries({ queryKey: ['noteCount'] });
+      } else if (message.type === MessageType.TOPIC_ASSIGNED) {
+        queryClient.invalidateQueries({ queryKey: ['topics'] });
+      }
+    };
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }, [queryClient]);
 
   const handleSignIn = useCallback(async () => {
     setIsSigningIn(true);
