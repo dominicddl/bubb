@@ -20,6 +20,8 @@
   --accent-green: 142 25% 36%;
   --accent-coral: 4 58% 58%;
   --accent-coral-light: 4 60% 94%;
+  --accent-gold: 38 60% 52%;
+  --accent-gold-light: 38 50% 92%;
   --primary: 24 8% 16%;
   --primary-foreground: 33 26% 96%;
   --input: 33 12% 86%;
@@ -34,4 +36,15 @@
 @keyframes blink-cursor {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
+}
+
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
