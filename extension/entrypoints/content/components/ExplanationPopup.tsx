@@ -3,6 +3,7 @@ import { PopupHeader } from './PopupHeader';
 import { PopupBody } from './PopupBody';
 import { PopupFooter } from './PopupFooter';
 import { SaveToast } from './SaveToast';
+import { TopicSuggestionChip } from './TopicSuggestionChip';
 import { DepthToggle } from './DepthToggle';
 import { ChatThread } from './ChatThread';
 import { MessageType } from '@/lib/messaging';
@@ -48,6 +49,14 @@ export function ExplanationPopup({
   const [noteId, setNoteId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState(false);
   const saveAttemptedRef = useRef(false);
+  const [topicSuggestion, setTopicSuggestion] = useState<{
+    suggestedTopic: string;
+    isExisting: boolean;
+    existingTopicId: string | null;
+  } | null>(null);
+  const [isLoadingTopic, setIsLoadingTopic] = useState(false);
+  const [showTopicSpinner, setShowTopicSpinner] = useState(false);
+  const [topicFlowComplete, setTopicFlowComplete] = useState(false);
 
   const streamPortRef = useRef<StreamPort | null>(null);
   const followUpDepthRef = useRef<DepthLevel | null>(null);
@@ -70,6 +79,13 @@ export function ExplanationPopup({
       })
       .catch(() => setIsSignedIn(false));
   }, []);
+
+  // Delay spinner to avoid flash for fast responses
+  useEffect(() => {
+    if (!isLoadingTopic) { setShowTopicSpinner(false); return; }
+    const timer = setTimeout(() => setShowTopicSpinner(true), 500);
+    return () => clearTimeout(timer);
+  }, [isLoadingTopic]);
 
   const resetDismissTimer = useCallback(() => {
     if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
@@ -229,6 +245,55 @@ export function ExplanationPopup({
               setSaveError(true);
             } else {
               setNoteId(data.id);
+              // Broadcast NOTE_SAVED to side panel
+              chrome.runtime.sendMessage({
+                type: MessageType.NOTE_SAVED,
+                payload: { noteId: data.id },
+              }).catch(() => {});
+
+              // Fetch topic suggestion (fire-and-forget style)
+              setIsLoadingTopic(true);
+              try {
+                // Get user's existing topics (limit to 30 most recent per Pitfall 6)
+                const { data: existingTopics } = await getSupabase()
+                  .from('topics')
+                  .select('name')
+                  .order('updated_at', { ascending: false })
+                  .limit(30);
+
+                const topicNames = (existingTopics ?? []).map((t: { name: string }) => t.name);
+
+                const BACKEND_URL = import.meta.env.WXT_BACKEND_URL || 'http://127.0.0.1:8000';
+                const { data: { session } } = await getSupabase().auth.getSession();
+                const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+                if (session?.access_token) {
+                  headers['Authorization'] = `Bearer ${session.access_token}`;
+                }
+
+                const suggestResp = await fetch(`${BACKEND_URL}/api/topics/suggest`, {
+                  method: 'POST',
+                  headers,
+                  body: JSON.stringify({
+                    highlighted_text: selectedText,
+                    explanation: depthCache.simple,
+                    existing_topics: topicNames,
+                  }),
+                });
+
+                if (suggestResp.ok) {
+                  const suggestion = await suggestResp.json();
+                  setTopicSuggestion({
+                    suggestedTopic: suggestion.suggested_topic,
+                    isExisting: suggestion.is_existing,
+                    existingTopicId: suggestion.existing_topic_id ?? null,
+                  });
+                }
+              } catch (err) {
+                // Silent fail per error handling spec — note saved without topic
+                console.warn('[bubb] Topic suggestion failed:', err);
+              } finally {
+                setIsLoadingTopic(false);
+              }
             }
           } else {
             setIsSignedIn(false);
@@ -394,6 +459,20 @@ export function ExplanationPopup({
             onLogin={handleLogin}
             onRetrySave={handleRetrySave}
             saveError={saveError}
+          />
+        )}
+        {noteId && showTopicSpinner && (
+          <div className="flex items-center justify-center border-t border-[hsl(var(--border))] px-[16px] py-[8px]">
+            <div className="w-3 h-3 border-2 border-[hsl(var(--muted-foreground))] border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+        {noteId && topicSuggestion && !topicFlowComplete && (
+          <TopicSuggestionChip
+            noteId={noteId}
+            suggestedTopic={topicSuggestion.suggestedTopic}
+            isExisting={topicSuggestion.isExisting}
+            existingTopicId={topicSuggestion.existingTopicId}
+            onComplete={() => setTopicFlowComplete(true)}
           />
         )}
       </div>

@@ -16,7 +16,7 @@ export function SaveToast({ noteId, isSignedIn, onUndo, onLogin, onRetrySave, sa
 
   useEffect(() => {
     if (!isSignedIn || saveError) return;
-    const timer = setTimeout(() => setVisible(false), 5000);
+    const timer = setTimeout(() => setVisible(false), 8000);
     return () => clearTimeout(timer);
   }, [isSignedIn, saveError]);
 
