@@ -56,7 +56,7 @@ function App() {
   // Invalidate React Query caches when notes or topics change
   useEffect(() => {
     const listener = (message: ExtensionMessage) => {
-      if (message.type === MessageType.NOTE_SAVED) {
+      if (message.type === MessageType.NOTE_SAVED || message.type === MessageType.NOTE_UPDATED) {
         queryClient.invalidateQueries({ queryKey: ['notes'] });
         queryClient.invalidateQueries({ queryKey: ['noteCount'] });
       } else if (message.type === MessageType.TOPIC_ASSIGNED) {
