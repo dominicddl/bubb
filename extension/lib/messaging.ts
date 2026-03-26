@@ -13,6 +13,8 @@ export const MessageType = {
   RENDER_LATEX: 'RENDER_LATEX',
   NOTE_SAVED: 'NOTE_SAVED',
   TOPIC_ASSIGNED: 'TOPIC_ASSIGNED',
+  SUGGEST_TOPIC: 'SUGGEST_TOPIC',
+  NOTE_UPDATED: 'NOTE_UPDATED',
 } as const;
 
 export type MessageTypeValue = (typeof MessageType)[keyof typeof MessageType];
@@ -79,6 +81,28 @@ export interface TopicAssignedMessage {
   payload: { noteId: string; topicId: string };
 }
 
+export interface SuggestTopicMessage {
+  type: typeof MessageType.SUGGEST_TOPIC;
+  payload: {
+    highlighted_text: string;
+    explanation: string;
+    existing_topics: string[];
+  };
+}
+
+export interface NoteUpdatedMessage {
+  type: typeof MessageType.NOTE_UPDATED;
+  payload: { noteId: string };
+}
+
+export interface SuggestTopicResponse {
+  success: boolean;
+  suggested_topic?: string;
+  is_existing?: boolean;
+  existing_topic_id?: string | null;
+  error?: string;
+}
+
 export type ExtensionMessage =
   | SignInMessage
   | SignOutMessage
@@ -87,7 +111,9 @@ export type ExtensionMessage =
   | ExplainTextMessage
   | RenderLatexMessage
   | NoteSavedMessage
-  | TopicAssignedMessage;
+  | TopicAssignedMessage
+  | SuggestTopicMessage
+  | NoteUpdatedMessage;
 
 export interface AuthResponse {
   success: boolean;

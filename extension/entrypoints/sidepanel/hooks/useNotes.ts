@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { getSupabase } from '@/lib/supabase';
+import type { ConversationTurn } from '@/lib/messaging';
 
 export interface Note {
   id: string;
@@ -9,6 +10,8 @@ export interface Note {
   page_title: string | null;
   topic_id: string | null;
   created_at: string;
+  responses: Record<string, string>;
+  conversation_history: ConversationTurn[];
 }
 
 export function usePageNotes(sourceUrl: string | null) {
@@ -17,7 +20,7 @@ export function usePageNotes(sourceUrl: string | null) {
     queryFn: async () => {
       const { data, error } = await getSupabase()
         .from('notes')
-        .select('id, highlighted_text, explanation, source_url, page_title, topic_id, created_at')
+        .select('id, highlighted_text, explanation, source_url, page_title, topic_id, created_at, responses, conversation_history')
         .eq('source_url', sourceUrl!)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -33,7 +36,7 @@ export function useTopicNotes(topicId: string | null) {
     queryFn: async () => {
       const { data, error } = await getSupabase()
         .from('notes')
-        .select('id, highlighted_text, explanation, source_url, page_title, topic_id, created_at')
+        .select('id, highlighted_text, explanation, source_url, page_title, topic_id, created_at, responses, conversation_history')
         .eq('topic_id', topicId!)
         .order('created_at', { ascending: false });
       if (error) throw error;
