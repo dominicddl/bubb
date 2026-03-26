@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { Note } from '../hooks/useNotes';
+import { NoteChatThread } from './NoteChatThread';
 
 function timeAgo(dateStr: string): string {
   const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -130,39 +131,8 @@ export function NoteListItem({ note, showSourceUrl, searchQuery }: NoteListItemP
         {searchQuery ? highlightText(displayText, searchQuery) : displayText}
       </p>
 
-      {/* Chat thread — inline until Task 8 creates NoteChatThread */}
-      {isExpanded && isRichNote && note.conversation_history.length > 0 && (
-        <div
-          className="flex flex-col gap-1 mt-2 pt-2"
-          style={{ borderTop: '1px solid hsl(var(--border))' }}
-        >
-          <span
-            className="text-[11px] font-medium tracking-wide uppercase"
-            style={{ color: 'hsl(24 5% 52%)', fontFamily: 'var(--font-mono)' }}
-          >
-            Follow-up questions
-          </span>
-          {note.conversation_history.map((turn, i) => (
-            <div key={i} className="flex flex-col gap-0.5">
-              <p
-                className="text-[12px] font-medium"
-                style={{ color: 'hsl(24 8% 28%)', fontFamily: 'var(--font-sans)' }}
-              >
-                Q: {turn.question}
-              </p>
-              <p
-                className="text-[12px]"
-                style={{
-                  color: 'hsl(24 5% 42%)',
-                  fontFamily: 'var(--font-sans)',
-                  lineHeight: 1.5,
-                }}
-              >
-                {turn.answer}
-              </p>
-            </div>
-          ))}
-        </div>
+      {isExpanded && isRichNote && (
+        <NoteChatThread turns={note.conversation_history} />
       )}
 
       {/* Source URL link */}
