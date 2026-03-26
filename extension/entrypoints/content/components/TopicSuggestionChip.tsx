@@ -36,10 +36,18 @@ export function TopicSuggestionChip({
     try {
       let topicId = knownTopicId;
       if (!topicId) {
-        // Create new topic via Supabase directly
+        // Create new topic — RLS requires user_id = auth.uid()
+        const { data: { session } } = await getSupabase().auth.getSession();
+        const userId = session?.user?.id;
+        if (!userId) {
+          console.error('[bubb] No session for topic creation');
+          setMode('done');
+          onComplete();
+          return;
+        }
         const { data } = await getSupabase()
           .from('topics')
-          .insert({ name: topicName })
+          .insert({ name: topicName, user_id: userId })
           .select('id')
           .single();
         topicId = data?.id ?? null;

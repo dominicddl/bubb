@@ -394,32 +394,38 @@ export function ExplanationPopup({
   }, [noteId]);
 
   // Save chat turns to DB when follow-up responses finish streaming
-  const prevThreadLengthRef = useRef(0);
+  // Track the streaming state of the last turn to detect the streaming→done transition.
+  // Length-based detection doesn't work: when the turn is added (length increases),
+  // isStreaming is still true; when streaming ends, length hasn't changed.
+  const prevLastTurnStreamingRef = useRef(false);
   useEffect(() => {
-    const prevLength = prevThreadLengthRef.current;
-    prevThreadLengthRef.current = thread.length;
+    if (thread.length === 0) {
+      prevLastTurnStreamingRef.current = false;
+      return;
+    }
 
-    // Detect: new turn added AND it's done streaming (isStreaming flipped to false)
-    if (thread.length > prevLength) {
-      const lastTurn = thread[thread.length - 1];
-      if (!lastTurn.isStreaming && lastTurn.answer.length > 0) {
-        const completedTurn = { question: lastTurn.question, answer: lastTurn.answer };
+    const lastTurn = thread[thread.length - 1];
+    const wasStreaming = prevLastTurnStreamingRef.current;
+    prevLastTurnStreamingRef.current = lastTurn.isStreaming;
 
-        if (noteId) {
-          getSupabase().rpc('append_conversation_turn', {
-            note_id: noteId,
-            turn: completedTurn,
-          }).then(() => {
-            chrome.runtime.sendMessage({
-              type: MessageType.NOTE_UPDATED,
-              payload: { noteId },
-            }).catch(() => {});
-          }).catch((err) => {
-            console.warn('[bubb] Failed to save chat turn:', err);
-          });
-        } else {
-          pendingChatTurnsRef.current = [...pendingChatTurnsRef.current, completedTurn];
-        }
+    // Detect transition: was streaming → now done, and has content
+    if (wasStreaming && !lastTurn.isStreaming && lastTurn.answer.length > 0) {
+      const completedTurn = { question: lastTurn.question, answer: lastTurn.answer };
+
+      if (noteId) {
+        getSupabase().rpc('append_conversation_turn', {
+          note_id: noteId,
+          turn: completedTurn,
+        }).then(() => {
+          chrome.runtime.sendMessage({
+            type: MessageType.NOTE_UPDATED,
+            payload: { noteId },
+          }).catch(() => {});
+        }).catch((err) => {
+          console.warn('[bubb] Failed to save chat turn:', err);
+        });
+      } else {
+        pendingChatTurnsRef.current = [...pendingChatTurnsRef.current, completedTurn];
       }
     }
   }, [thread, noteId]);
