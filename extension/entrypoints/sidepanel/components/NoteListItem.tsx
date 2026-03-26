@@ -44,6 +44,14 @@ interface NoteListItemProps {
 
 export function NoteListItem({ note, showSourceUrl, searchQuery }: NoteListItemProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>('simple');
+
+  const isRichNote =
+    Object.keys(note.responses).length > 1 || note.conversation_history.length > 0;
+
+  const displayText = isRichNote
+    ? (note.responses[activeTab] || note.explanation)
+    : note.explanation;
 
   return (
     <div
@@ -79,62 +87,86 @@ export function NoteListItem({ note, showSourceUrl, searchQuery }: NoteListItemP
         </span>
       </div>
 
-      {/* Line 2: explanation — truncated when collapsed, full when expanded */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateRows: isExpanded ? '1fr' : '0fr',
-          transition: 'grid-template-rows 200ms ease-out',
-        }}
-      >
-        <div style={{ overflow: 'hidden' }}>
-          <p
-            className="text-[13px] mt-0.5"
-            style={{
-              color: 'hsl(24 5% 52%)',
-              fontFamily: 'var(--font-sans)',
-              fontWeight: 400,
-              lineHeight: 1.5,
-              wordBreak: 'break-word',
-            }}
-          >
-            {searchQuery ? highlightText(note.explanation, searchQuery) : note.explanation}
-          </p>
-
-          {/* Source URL link — only in expanded state when showSourceUrl=true */}
-          {showSourceUrl && note.source_url && (
-            <a
-              href={note.source_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="block text-[11px] truncate mt-0.5 hover:underline"
+      {/* Depth tabs — only shown when expanded and rich */}
+      {isExpanded && isRichNote && (
+        <div className="flex gap-1 mt-2 mb-1">
+          {Object.keys(note.responses).map((depth) => (
+            <button
+              key={depth}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveTab(depth);
+              }}
+              className="text-[11px] px-2 py-0.5 rounded-full capitalize"
               style={{
-                color: 'hsl(var(--accent-coral))',
                 fontFamily: 'var(--font-mono)',
+                background:
+                  activeTab === depth ? 'hsl(var(--accent-coral) / 0.12)' : 'transparent',
+                color:
+                  activeTab === depth ? 'hsl(var(--accent-coral))' : 'hsl(24 5% 52%)',
+                border:
+                  activeTab === depth
+                    ? '1px solid hsl(var(--accent-coral) / 0.25)'
+                    : '1px solid transparent',
               }}
             >
-              {note.source_url}
-            </a>
-          )}
+              {depth}
+            </button>
+          ))}
         </div>
-      </div>
-
-      {/* Truncated explanation preview when collapsed */}
-      {!isExpanded && (
-        <p
-          className="text-[13px] truncate mt-0.5"
-          style={{
-            color: 'hsl(24 5% 52%)',
-            fontFamily: 'var(--font-sans)',
-          }}
-        >
-          {searchQuery ? highlightText(note.explanation, searchQuery) : note.explanation}
-        </p>
       )}
 
-      {/* Source URL below collapsed preview when showSourceUrl=true */}
-      {!isExpanded && showSourceUrl && note.source_url && (
+      {/* Explanation / active depth response */}
+      <p
+        className={`text-[13px] mt-0.5 ${isExpanded ? '' : 'truncate'}`}
+        style={{
+          color: 'hsl(24 5% 52%)',
+          fontFamily: 'var(--font-sans)',
+          fontWeight: 400,
+          lineHeight: 1.5,
+          wordBreak: isExpanded ? 'break-word' : undefined,
+        }}
+      >
+        {searchQuery ? highlightText(displayText, searchQuery) : displayText}
+      </p>
+
+      {/* Chat thread — inline until Task 8 creates NoteChatThread */}
+      {isExpanded && isRichNote && note.conversation_history.length > 0 && (
+        <div
+          className="flex flex-col gap-1 mt-2 pt-2"
+          style={{ borderTop: '1px solid hsl(var(--border))' }}
+        >
+          <span
+            className="text-[11px] font-medium tracking-wide uppercase"
+            style={{ color: 'hsl(24 5% 52%)', fontFamily: 'var(--font-mono)' }}
+          >
+            Follow-up questions
+          </span>
+          {note.conversation_history.map((turn, i) => (
+            <div key={i} className="flex flex-col gap-0.5">
+              <p
+                className="text-[12px] font-medium"
+                style={{ color: 'hsl(24 8% 28%)', fontFamily: 'var(--font-sans)' }}
+              >
+                Q: {turn.question}
+              </p>
+              <p
+                className="text-[12px]"
+                style={{
+                  color: 'hsl(24 5% 42%)',
+                  fontFamily: 'var(--font-sans)',
+                  lineHeight: 1.5,
+                }}
+              >
+                {turn.answer}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Source URL link */}
+      {showSourceUrl && note.source_url && (
         <a
           href={note.source_url}
           target="_blank"

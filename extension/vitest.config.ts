@@ -10,7 +10,7 @@ export default defineConfig({
       // Sidepanel tests need DOM APIs for React hooks
       ['tests/sidepanel/**', 'happy-dom'],
     ],
-    include: ['tests/**/*.test.ts'],
+    include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
     exclude: ['node_modules', '.output', '.wxt'],
   },
   resolve: {
