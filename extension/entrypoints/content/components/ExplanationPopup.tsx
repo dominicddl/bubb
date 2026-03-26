@@ -355,25 +355,74 @@ export function ExplanationPopup({
     }
   }, [depthStreaming, noteId, depthCache]);
 
-  // Flush pending depth responses when noteId becomes available
+  // Flush all pending data when noteId becomes available
   useEffect(() => {
-    if (!noteId || Object.keys(pendingResponsesRef.current).length === 0) return;
+    if (!noteId) return;
 
-    const pending = pendingResponsesRef.current;
-    pendingResponsesRef.current = {};
+    // Flush pending depth responses
+    if (Object.keys(pendingResponsesRef.current).length > 0) {
+      const pending = pendingResponsesRef.current;
+      pendingResponsesRef.current = {};
+      getSupabase().rpc('merge_note_responses', {
+        note_id: noteId,
+        new_responses: pending,
+      }).then(() => {
+        chrome.runtime.sendMessage({
+          type: MessageType.NOTE_UPDATED,
+          payload: { noteId },
+        }).catch(() => {});
+      }).catch((err) => console.warn('[bubb] Failed to flush pending responses:', err));
+    }
 
-    getSupabase().rpc('merge_note_responses', {
-      note_id: noteId,
-      new_responses: pending,
-    }).then(() => {
-      chrome.runtime.sendMessage({
-        type: MessageType.NOTE_UPDATED,
-        payload: { noteId },
-      }).catch(() => {});
-    }).catch((err) => {
-      console.warn('[bubb] Failed to flush pending responses:', err);
-    });
+    // Flush pending chat turns (sequential to maintain order)
+    if (pendingChatTurnsRef.current.length > 0) {
+      const turns = [...pendingChatTurnsRef.current];
+      pendingChatTurnsRef.current = [];
+      (async () => {
+        for (const turn of turns) {
+          await getSupabase().rpc('append_conversation_turn', {
+            note_id: noteId,
+            turn,
+          }).catch((err) => console.warn('[bubb] Failed to flush chat turn:', err));
+        }
+        chrome.runtime.sendMessage({
+          type: MessageType.NOTE_UPDATED,
+          payload: { noteId },
+        }).catch(() => {});
+      })();
+    }
   }, [noteId]);
+
+  // Save chat turns to DB when follow-up responses finish streaming
+  const prevThreadLengthRef = useRef(0);
+  useEffect(() => {
+    const prevLength = prevThreadLengthRef.current;
+    prevThreadLengthRef.current = thread.length;
+
+    // Detect: new turn added AND it's done streaming (isStreaming flipped to false)
+    if (thread.length > prevLength) {
+      const lastTurn = thread[thread.length - 1];
+      if (!lastTurn.isStreaming && lastTurn.answer.length > 0) {
+        const completedTurn = { question: lastTurn.question, answer: lastTurn.answer };
+
+        if (noteId) {
+          getSupabase().rpc('append_conversation_turn', {
+            note_id: noteId,
+            turn: completedTurn,
+          }).then(() => {
+            chrome.runtime.sendMessage({
+              type: MessageType.NOTE_UPDATED,
+              payload: { noteId },
+            }).catch(() => {});
+          }).catch((err) => {
+            console.warn('[bubb] Failed to save chat turn:', err);
+          });
+        } else {
+          pendingChatTurnsRef.current = [...pendingChatTurnsRef.current, completedTurn];
+        }
+      }
+    }
+  }, [thread, noteId]);
 
   const handleDepthChange = useCallback((newDepth: DepthLevel) => {
     setActiveDepth(newDepth);
