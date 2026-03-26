@@ -65,6 +65,8 @@ export function ExplanationPopup({
   const userScrolledUpRef = useRef(false);
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const providerRef = useRef<Provider>('openai');
+  const pendingResponsesRef = useRef<Record<string, string>>({});
+  const pendingChatTurnsRef = useRef<Array<{ question: string; answer: string }>>([]);
 
   // Track active provider in ref for use inside stable port callbacks
   useEffect(() => {
@@ -227,8 +229,31 @@ export function ExplanationPopup({
       const saveNote = async () => {
         try {
           const { data: { session } } = await getSupabase().auth.getSession();
-          if (session?.user) {
-            setIsSignedIn(true);
+          if (!session?.user) {
+            setIsSignedIn(false);
+            return;
+          }
+
+          setIsSignedIn(true);
+
+          // Check for duplicate — same highlighted text on same URL
+          const { data: existing } = await getSupabase()
+            .from('notes')
+            .select('id, topic_id')
+            .eq('highlighted_text', selectedText)
+            .eq('source_url', sourceUrl)
+            .limit(1)
+            .maybeSingle();
+
+          let savedNoteId: string;
+
+          if (existing) {
+            // Already saved — reuse existing note, skip insert
+            savedNoteId = existing.id;
+            setNoteId(savedNoteId);
+            // Skip topic suggestion if note already has a topic
+            if (existing.topic_id) return;
+          } else {
             const { data, error: insertError } = await getSupabase()
               .from('notes')
               .insert({
@@ -236,67 +261,58 @@ export function ExplanationPopup({
                 explanation: depthCache.simple,
                 source_url: sourceUrl,
                 page_title: pageTitle,
+                responses: { simple: depthCache.simple },
               })
               .select('id')
               .single();
 
-            if (insertError) {
+            if (insertError || !data) {
               console.error('[bubb] Failed to save note:', insertError);
               setSaveError(true);
-            } else {
-              setNoteId(data.id);
-              // Broadcast NOTE_SAVED to side panel
-              chrome.runtime.sendMessage({
-                type: MessageType.NOTE_SAVED,
-                payload: { noteId: data.id },
-              }).catch(() => {});
-
-              // Fetch topic suggestion (fire-and-forget style)
-              setIsLoadingTopic(true);
-              try {
-                // Get user's existing topics (limit to 30 most recent per Pitfall 6)
-                const { data: existingTopics } = await getSupabase()
-                  .from('topics')
-                  .select('name')
-                  .order('updated_at', { ascending: false })
-                  .limit(30);
-
-                const topicNames = (existingTopics ?? []).map((t: { name: string }) => t.name);
-
-                const BACKEND_URL = import.meta.env.WXT_BACKEND_URL || 'http://127.0.0.1:8000';
-                const { data: { session } } = await getSupabase().auth.getSession();
-                const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-                if (session?.access_token) {
-                  headers['Authorization'] = `Bearer ${session.access_token}`;
-                }
-
-                const suggestResp = await fetch(`${BACKEND_URL}/api/topics/suggest`, {
-                  method: 'POST',
-                  headers,
-                  body: JSON.stringify({
-                    highlighted_text: selectedText,
-                    explanation: depthCache.simple,
-                    existing_topics: topicNames,
-                  }),
-                });
-
-                if (suggestResp.ok) {
-                  const suggestion = await suggestResp.json();
-                  setTopicSuggestion({
-                    suggestedTopic: suggestion.suggested_topic,
-                    isExisting: suggestion.is_existing,
-                    existingTopicId: suggestion.existing_topic_id ?? null,
-                  });
-                }
-              } catch (err) {
-                // Silent fail per error handling spec — note saved without topic
-                console.warn('[bubb] Topic suggestion failed:', err);
-              } finally {
-                setIsLoadingTopic(false);
-              }
+              return;
             }
-          } else {
-            setIsSignedIn(false);
+
+            savedNoteId = data.id;
+            setNoteId(savedNoteId);
+          }
+
+          // Broadcast NOTE_SAVED to side panel
+          chrome.runtime.sendMessage({
+            type: MessageType.NOTE_SAVED,
+            payload: { noteId: savedNoteId },
+          }).catch(() => {});
+
+          // Fetch topic suggestion via background script (avoids CORS)
+          setIsLoadingTopic(true);
+          try {
+            const { data: existingTopics } = await getSupabase()
+              .from('topics')
+              .select('name')
+              .order('updated_at', { ascending: false })
+              .limit(30);
+
+            const topicNames = (existingTopics ?? []).map((t: { name: string }) => t.name);
+
+            const response = await chrome.runtime.sendMessage({
+              type: MessageType.SUGGEST_TOPIC,
+              payload: {
+                highlighted_text: selectedText,
+                explanation: depthCache.simple,
+                existing_topics: topicNames,
+              },
+            });
+
+            if (response?.success) {
+              setTopicSuggestion({
+                suggestedTopic: response.suggested_topic,
+                isExisting: response.is_existing,
+                existingTopicId: response.existing_topic_id ?? null,
+              });
+            }
+          } catch (err) {
+            console.warn('[bubb] Topic suggestion failed:', err);
+          } finally {
+            setIsLoadingTopic(false);
           }
         } catch (err) {
           console.error('[bubb] Save error:', err);
@@ -387,6 +403,7 @@ export function ExplanationPopup({
           explanation: depthCache.simple,
           source_url: sourceUrl,
           page_title: pageTitle,
+          responses: { simple: depthCache.simple },
         })
         .select('id')
         .single();
@@ -395,6 +412,22 @@ export function ExplanationPopup({
         setSaveError(true);
       } else {
         setNoteId(data.id);
+        // Flush any pending depth responses
+        if (Object.keys(pendingResponsesRef.current).length > 0) {
+          await getSupabase().rpc('merge_note_responses', {
+            note_id: data.id,
+            new_responses: pendingResponsesRef.current,
+          });
+          pendingResponsesRef.current = {};
+        }
+        // Flush any pending chat turns
+        for (const turn of pendingChatTurnsRef.current) {
+          await getSupabase().rpc('append_conversation_turn', {
+            note_id: data.id,
+            turn,
+          });
+        }
+        pendingChatTurnsRef.current = [];
       }
     } catch {
       setSaveError(true);
