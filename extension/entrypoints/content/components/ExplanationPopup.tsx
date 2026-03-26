@@ -67,6 +67,7 @@ export function ExplanationPopup({
   const providerRef = useRef<Provider>('openai');
   const pendingResponsesRef = useRef<Record<string, string>>({});
   const pendingChatTurnsRef = useRef<Array<{ question: string; answer: string }>>([]);
+  const prevDepthStreamingRef = useRef(depthStreaming);
 
   // Track active provider in ref for use inside stable port callbacks
   useEffect(() => {
@@ -322,6 +323,57 @@ export function ExplanationPopup({
       saveNote();
     }
   }, [depthStreaming.simple]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save depth responses to DB when non-simple depths finish streaming
+  useEffect(() => {
+    const prev = prevDepthStreamingRef.current;
+    prevDepthStreamingRef.current = depthStreaming;
+
+    for (const depth of ['standard', 'deep'] as const) {
+      // Detect transition: was streaming → now done, and has content
+      if (prev[depth] && !depthStreaming[depth] && depthCache[depth].length > 0) {
+        const responseData = { [depth]: depthCache[depth] };
+
+        if (noteId) {
+          // Note exists — merge immediately
+          getSupabase().rpc('merge_note_responses', {
+            note_id: noteId,
+            new_responses: responseData,
+          }).then(() => {
+            chrome.runtime.sendMessage({
+              type: MessageType.NOTE_UPDATED,
+              payload: { noteId },
+            }).catch(() => {});
+          }).catch((err) => {
+            console.warn(`[bubb] Failed to save ${depth} response:`, err);
+          });
+        } else {
+          // Note not yet created — queue for later flush
+          pendingResponsesRef.current = { ...pendingResponsesRef.current, ...responseData };
+        }
+      }
+    }
+  }, [depthStreaming, noteId, depthCache]);
+
+  // Flush pending depth responses when noteId becomes available
+  useEffect(() => {
+    if (!noteId || Object.keys(pendingResponsesRef.current).length === 0) return;
+
+    const pending = pendingResponsesRef.current;
+    pendingResponsesRef.current = {};
+
+    getSupabase().rpc('merge_note_responses', {
+      note_id: noteId,
+      new_responses: pending,
+    }).then(() => {
+      chrome.runtime.sendMessage({
+        type: MessageType.NOTE_UPDATED,
+        payload: { noteId },
+      }).catch(() => {});
+    }).catch((err) => {
+      console.warn('[bubb] Failed to flush pending responses:', err);
+    });
+  }, [noteId]);
 
   const handleDepthChange = useCallback((newDepth: DepthLevel) => {
     setActiveDepth(newDepth);
