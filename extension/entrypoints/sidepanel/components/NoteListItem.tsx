@@ -119,7 +119,7 @@ export function NoteListItem({ note, showSourceUrl, searchQuery }: NoteListItemP
 
       {/* Explanation / active depth response */}
       <p
-        className={`text-[13px] mt-0.5 ${isExpanded ? '' : 'truncate'}`}
+        className={`text-[13px] mt-0.5 ${isExpanded ? '' : 'line-clamp-2'}`}
         style={{
           color: 'hsl(24 5% 52%)',
           fontFamily: 'var(--font-sans)',

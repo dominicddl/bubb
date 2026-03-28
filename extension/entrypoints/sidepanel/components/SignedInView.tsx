@@ -38,7 +38,7 @@ export function SignedInView({ userName, onSignOut }: SignedInViewProps) {
   } = useSidePanelStore();
 
   return (
-    <div className="flex flex-col min-h-[480px]">
+    <div className="flex flex-col min-h-[480px] overflow-hidden">
       {/* Three-way conditional: search overlay, topic detail, or main view */}
       {isSearchOpen ? (
         <SearchOverlay />
@@ -58,7 +58,7 @@ export function SignedInView({ userName, onSignOut }: SignedInViewProps) {
 
           <TabNav />
 
-          <div className="flex flex-col flex-1">
+          <div className="flex flex-col flex-1 min-w-0">
             {activeTab === 'this-page' ? (
               isLoadingPageNotes ? (
                 <div className="flex flex-col gap-2 px-7 py-2">

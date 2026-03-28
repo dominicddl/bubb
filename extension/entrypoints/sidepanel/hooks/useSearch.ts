@@ -22,8 +22,8 @@ export function useSearch(query: string) {
       const pattern = `%${escaped}%`;
       const { data, error } = await getSupabase()
         .from('notes')
-        .select('id, highlighted_text, explanation, source_url, page_title, topic_id, created_at')
-        .or(`highlighted_text.ilike.${pattern},explanation.ilike.${pattern}`)
+        .select('id, highlighted_text, explanation, source_url, page_title, topic_id, created_at, responses, conversation_history')
+        .ilike('highlighted_text', pattern)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data ?? [];

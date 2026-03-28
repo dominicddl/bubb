@@ -117,7 +117,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-[480px]">
+    <div className="min-h-[480px] w-full overflow-hidden">
       {error && (
         <div className="px-6 pt-4">
           <AuthErrorBanner
