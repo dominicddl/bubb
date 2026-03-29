@@ -73,14 +73,53 @@ export function ExplanationPopup({
     providerRef.current = activeProvider;
   }, [activeProvider]);
 
-  // Auth state
+  // Auth state — check on mount and listen for changes from background
   useEffect(() => {
     chrome.runtime.sendMessage({ type: MessageType.GET_AUTH_STATE })
       .then((response: { isAuthenticated?: boolean }) => {
         setIsSignedIn(!!response?.isAuthenticated);
       })
       .catch(() => setIsSignedIn(false));
-  }, []);
+
+    const authListener = (message: { type: string; payload?: { isAuthenticated?: boolean } }) => {
+      if (message.type === MessageType.AUTH_STATE_CHANGED && message.payload?.isAuthenticated) {
+        setIsSignedIn(true);
+        setSaveError(false);
+        // If we have unsaved content, retry the save immediately
+        if (saveAttemptedRef.current && depthCache.simple.length > 0) {
+          (async () => {
+            try {
+              const saveResponse = await chrome.runtime.sendMessage({
+                type: MessageType.SAVE_NOTE,
+                payload: {
+                  highlighted_text: selectedText,
+                  explanation: depthCache.simple,
+                  source_url: sourceUrl,
+                  page_title: pageTitle,
+                  responses: { simple: depthCache.simple },
+                },
+              });
+              if (saveResponse?.success) {
+                setNoteId(saveResponse.id);
+                chrome.runtime.sendMessage({
+                  type: MessageType.NOTE_SAVED,
+                  payload: { noteId: saveResponse.id },
+                }).catch(() => {});
+              } else {
+                setSaveError(true);
+              }
+            } catch {
+              setSaveError(true);
+            }
+          })();
+        }
+      } else if (message.type === MessageType.AUTH_STATE_CHANGED) {
+        setIsSignedIn(false);
+      }
+    };
+    chrome.runtime.onMessage.addListener(authListener);
+    return () => chrome.runtime.onMessage.removeListener(authListener);
+  }, [depthCache.simple, selectedText, sourceUrl, pageTitle]);
 
   // Delay spinner to avoid flash for fast responses
   useEffect(() => {
@@ -374,7 +413,7 @@ export function ExplanationPopup({
     prevLastTurnStreamingRef.current = lastTurn.isStreaming;
 
     if (wasStreaming && !lastTurn.isStreaming && lastTurn.answer.length > 0) {
-      const completedTurn = { question: lastTurn.question, answer: lastTurn.answer };
+      const completedTurn = { question: lastTurn.question, answer: lastTurn.answer, depth: activeDepth };
 
       if (noteId) {
         chrome.runtime.sendMessage({
@@ -392,7 +431,7 @@ export function ExplanationPopup({
         pendingChatTurnsRef.current = [...pendingChatTurnsRef.current, completedTurn];
       }
     }
-  }, [thread, noteId]);
+  }, [thread, noteId, activeDepth]);
 
   const handleDepthChange = useCallback((newDepth: DepthLevel) => {
     setActiveDepth(newDepth);
@@ -456,6 +495,11 @@ export function ExplanationPopup({
         type: MessageType.DELETE_NOTE,
         payload: { noteId },
       });
+      // Notify side panel to refresh its notes list
+      chrome.runtime.sendMessage({
+        type: MessageType.NOTE_UPDATED,
+        payload: { noteId },
+      }).catch(() => {});
       setNoteId(null);
     } catch (err) {
       console.error('[bubb] Undo failed:', err);
@@ -569,12 +613,12 @@ export function ExplanationPopup({
             saveError={saveError}
           />
         )}
-        {noteId && showTopicSpinner && (
+        {isSignedIn && noteId && showTopicSpinner && (
           <div className="flex items-center justify-center border-t border-[hsl(var(--border))] px-[16px] py-[8px]">
             <div className="w-3 h-3 border-2 border-[hsl(var(--muted-foreground))] border-t-transparent rounded-full animate-spin" />
           </div>
         )}
-        {noteId && topicSuggestion && !topicFlowComplete && (
+        {isSignedIn && noteId && topicSuggestion && !topicFlowComplete && (
           <TopicSuggestionChip
             noteId={noteId}
             suggestedTopic={topicSuggestion.suggestedTopic}

@@ -11,6 +11,32 @@ type DepthCache = Record<DepthLevel, string>;
 // Cache explanations so re-highlighting the same text reuses previous results
 const explanationCache = new Map<string, DepthCache>();
 
+function showAuthToast(message: string) {
+  const toast = document.createElement('div');
+  toast.textContent = message;
+  Object.assign(toast.style, {
+    position: 'fixed',
+    top: '16px',
+    right: '16px',
+    padding: '10px 18px',
+    background: '#1a1a1a',
+    color: '#fff',
+    borderRadius: '8px',
+    fontSize: '13px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+    zIndex: '2147483647',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+    opacity: '0',
+    transition: 'opacity 0.2s ease',
+  });
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => { toast.style.opacity = '1'; });
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 200);
+  }, 3000);
+}
+
 export default defineContentScript({
   matches: ['<all_urls>'],
   runAt: 'document_idle',
@@ -25,6 +51,14 @@ export default defineContentScript({
         currentUi = null;
       }
     }
+
+    // Listen for auth state changes from background to show sign-in confirmation
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message.type === 'AUTH_STATE_CHANGED' && message.payload?.isAuthenticated) {
+        const name = message.payload.user?.name || 'User';
+        showAuthToast(`Signed in as ${name}`);
+      }
+    });
 
     document.addEventListener('mouseup', async (event) => {
       try {
