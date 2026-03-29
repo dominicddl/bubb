@@ -3,7 +3,7 @@ from supabase import create_client
 
 from app.auth.dependencies import get_current_user
 from app.config import settings
-from app.models.notes import AssignTopicRequest, NoteCountResponse, NoteResponse
+from app.models.notes import AssignTopicRequest, CreateNoteRequest, CreateNoteResponse, NoteCountResponse, NoteResponse
 
 router = APIRouter()
 
@@ -15,6 +15,58 @@ def get_supabase():
 def escape_ilike(s: str) -> str:
     """Escape wildcard characters for use in ILIKE queries."""
     return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+@router.post("/notes", response_model=CreateNoteResponse)
+async def create_note(
+    body: CreateNoteRequest,
+    user: dict = Depends(get_current_user),
+) -> CreateNoteResponse:
+    """Create a note with duplicate detection. If same highlighted_text + source_url
+    exists for this user, returns the existing note instead of inserting."""
+    supabase = get_supabase()
+    user_id = user["sub"]
+
+    # Check for duplicate
+    existing = (
+        supabase.table("notes")
+        .select("id, topic_id")
+        .eq("user_id", user_id)
+        .eq("highlighted_text", body.highlighted_text)
+        .eq("source_url", body.source_url)
+        .limit(1)
+        .execute()
+    )
+
+    if existing.data:
+        row = existing.data[0]
+        return CreateNoteResponse(
+            id=row["id"],
+            is_duplicate=True,
+            has_topic=row.get("topic_id") is not None,
+        )
+
+    # Insert new note
+    result = (
+        supabase.table("notes")
+        .insert({
+            "user_id": user_id,
+            "highlighted_text": body.highlighted_text,
+            "explanation": body.explanation,
+            "source_url": body.source_url,
+            "page_title": body.page_title,
+            "responses": body.responses,
+        })
+        .select("id")
+        .single()
+        .execute()
+    )
+
+    return CreateNoteResponse(
+        id=result.data[0]["id"],
+        is_duplicate=False,
+        has_topic=False,
+    )
 
 
 @router.get("/notes", response_model=list[NoteResponse])

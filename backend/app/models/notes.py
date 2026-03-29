@@ -18,3 +18,17 @@ class NoteCountResponse(BaseModel):
 
 class AssignTopicRequest(BaseModel):
     topic_id: str
+
+
+class CreateNoteRequest(BaseModel):
+    highlighted_text: str
+    explanation: str
+    source_url: str
+    page_title: str | None = None
+    responses: dict = {}
+
+
+class CreateNoteResponse(BaseModel):
+    id: str
+    is_duplicate: bool
+    has_topic: bool
