@@ -1,7 +1,6 @@
 """Structured logging configuration using structlog."""
 
 import logging
-import sys
 
 import structlog
 
@@ -50,6 +49,6 @@ def setup_logging() -> None:
         ],
         wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
         context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
+        logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=False,
     )
