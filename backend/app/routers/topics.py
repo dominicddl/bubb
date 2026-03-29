@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from supabase import create_client
 
 from app.auth.dependencies import get_current_user
+from app.rate_limit import limiter, CRUD_LIMIT, WRITE_LIMIT, AI_LIMIT_AUTH, _get_user_id
 from app.config import settings
 from app.models.topics import (
     CreateTopicRequest,
@@ -29,7 +30,9 @@ def get_supabase():
 
 
 @router.get("/topics", response_model=list[TopicResponse])
+@limiter.limit(CRUD_LIMIT, key_func=_get_user_id)
 async def list_topics(
+    request: Request,
     user: dict = Depends(get_current_user),
 ) -> list[TopicResponse]:
     """List all topics for the authenticated user ordered by updated_at desc."""
@@ -45,7 +48,9 @@ async def list_topics(
 
 
 @router.post("/topics", response_model=TopicResponse)
+@limiter.limit(WRITE_LIMIT, key_func=_get_user_id)
 async def create_topic(
+    request: Request,
     body: CreateTopicRequest,
     user: dict = Depends(get_current_user),
 ) -> TopicResponse:
@@ -60,7 +65,9 @@ async def create_topic(
 
 
 @router.post("/topics/suggest", response_model=TopicSuggestionResponse)
+@limiter.limit(AI_LIMIT_AUTH, key_func=_get_user_id)
 async def suggest_topic(
+    request: Request,
     body: TopicSuggestionRequest,
     user: dict = Depends(get_current_user),
 ) -> TopicSuggestionResponse:

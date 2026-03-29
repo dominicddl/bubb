@@ -1,12 +1,13 @@
 from collections.abc import AsyncIterable
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 from google import genai
 
 from app.auth.dependencies import get_optional_user
+from app.rate_limit import limiter, _get_user_id_or_ip, _ai_limit_value
 from app.config import settings
 from app.models.explain import (
     ExplainRequest,
@@ -162,7 +163,9 @@ def _build_stream_user_prompt(body: StreamExplainRequest) -> str:
 
 
 @router.post("/explain/stream", response_class=EventSourceResponse)
+@limiter.limit(_ai_limit_value, key_func=_get_user_id_or_ip)
 async def stream_explain(
+    request: Request,
     body: StreamExplainRequest,
     user: dict | None = Depends(get_optional_user),
 ) -> AsyncIterable[ServerSentEvent]:
@@ -200,7 +203,9 @@ async def stream_explain(
 
 
 @router.post("/explain", response_model=ExplainResponse)
+@limiter.limit(_ai_limit_value, key_func=_get_user_id_or_ip)
 async def explain_text(
+    request: Request,
     body: ExplainRequest,
     user: dict | None = Depends(get_optional_user),
 ) -> ExplainResponse:

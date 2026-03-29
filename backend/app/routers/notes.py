@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from supabase import create_client
 
 from app.auth.dependencies import get_current_user
+from app.rate_limit import limiter, CRUD_LIMIT, WRITE_LIMIT, _get_user_id
 from app.config import settings
 from app.models.notes import AssignTopicRequest, NoteCountResponse, NoteResponse
 
@@ -18,7 +19,9 @@ def escape_ilike(s: str) -> str:
 
 
 @router.get("/notes", response_model=list[NoteResponse])
+@limiter.limit(CRUD_LIMIT, key_func=_get_user_id)
 async def list_notes(
+    request: Request,
     source_url: str | None = None,
     topic_id: str | None = None,
     search: str | None = None,
@@ -47,7 +50,9 @@ async def list_notes(
 
 
 @router.get("/notes/count", response_model=NoteCountResponse)
+@limiter.limit(CRUD_LIMIT, key_func=_get_user_id)
 async def count_notes(
+    request: Request,
     user: dict = Depends(get_current_user),
 ) -> NoteCountResponse:
     """Return total note count for the authenticated user."""
@@ -62,7 +67,9 @@ async def count_notes(
 
 
 @router.patch("/notes/{note_id}/topic", status_code=status.HTTP_200_OK)
+@limiter.limit(WRITE_LIMIT, key_func=_get_user_id)
 async def assign_topic(
+    request: Request,
     note_id: str,
     body: AssignTopicRequest,
     user: dict = Depends(get_current_user),
