@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Pencil, X } from 'lucide-react';
-import { getSupabase } from '@/lib/supabase';
 import { MessageType } from '@/lib/messaging';
 
 interface TopicSuggestionChipProps {
@@ -36,28 +35,18 @@ export function TopicSuggestionChip({
     try {
       let topicId = knownTopicId;
       if (!topicId) {
-        // Create new topic — RLS requires user_id = auth.uid()
-        const { data: { session } } = await getSupabase().auth.getSession();
-        const userId = session?.user?.id;
-        if (!userId) {
-          console.error('[bubb] No session for topic creation');
-          setMode('done');
-          onComplete();
-          return;
-        }
-        const { data } = await getSupabase()
-          .from('topics')
-          .insert({ name: topicName, user_id: userId })
-          .select('id')
-          .single();
-        topicId = data?.id ?? null;
+        // Create new topic via backend
+        const createResponse = await chrome.runtime.sendMessage({
+          type: MessageType.CREATE_TOPIC,
+          payload: { name: topicName },
+        });
+        topicId = createResponse?.success ? createResponse.id : null;
       }
       if (topicId) {
-        // Assign topic to note via RPC (atomically updates topic_id + note_count)
-        // Do NOT call .update({ topic_id }) separately — the RPC handles everything
-        await getSupabase().rpc('assign_topic_to_note', {
-          p_note_id: noteId,
-          p_topic_id: topicId,
+        // Assign topic to note via backend
+        await chrome.runtime.sendMessage({
+          type: MessageType.ASSIGN_TOPIC,
+          payload: { noteId, topicId },
         });
         // Broadcast to side panel
         chrome.runtime.sendMessage({
@@ -85,21 +74,8 @@ export function TopicSuggestionChip({
       return;
     }
 
-    setMode('saving');
-    try {
-      // Check if editValue matches an existing topic (case-insensitive)
-      const { data: matches } = await getSupabase()
-        .from('topics')
-        .select('id')
-        .ilike('name', trimmed)
-        .limit(1);
-
-      const matchedId = matches?.[0]?.id ?? null;
-      await assignTopic(trimmed, matchedId);
-    } catch (err) {
-      console.error('[bubb] Topic lookup failed:', err);
-      await assignTopic(trimmed, null);
-    }
+    // Pass null for knownTopicId — backend will create the topic
+    await assignTopic(trimmed, null);
   }
 
   function handleSkip() {
