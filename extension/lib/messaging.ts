@@ -15,6 +15,12 @@ export const MessageType = {
   TOPIC_ASSIGNED: 'TOPIC_ASSIGNED',
   SUGGEST_TOPIC: 'SUGGEST_TOPIC',
   NOTE_UPDATED: 'NOTE_UPDATED',
+  SAVE_NOTE: 'SAVE_NOTE',
+  DELETE_NOTE: 'DELETE_NOTE',
+  MERGE_RESPONSES: 'MERGE_RESPONSES',
+  APPEND_CONVERSATION: 'APPEND_CONVERSATION',
+  CREATE_TOPIC: 'CREATE_TOPIC',
+  ASSIGN_TOPIC: 'ASSIGN_TOPIC',
 } as const;
 
 export type MessageTypeValue = (typeof MessageType)[keyof typeof MessageType];
@@ -103,6 +109,56 @@ export interface SuggestTopicResponse {
   error?: string;
 }
 
+export interface SaveNoteMessage {
+  type: typeof MessageType.SAVE_NOTE;
+  payload: {
+    highlighted_text: string;
+    explanation: string;
+    source_url: string;
+    page_title: string;
+    responses: Record<string, string>;
+  };
+}
+
+export interface SaveNoteResponse {
+  success: boolean;
+  id?: string;
+  is_duplicate?: boolean;
+  has_topic?: boolean;
+  error?: string;
+}
+
+export interface DeleteNoteMessage {
+  type: typeof MessageType.DELETE_NOTE;
+  payload: { noteId: string };
+}
+
+export interface MergeResponsesMessage {
+  type: typeof MessageType.MERGE_RESPONSES;
+  payload: {
+    noteId: string;
+    responses: Record<string, string>;
+  };
+}
+
+export interface AppendConversationMessage {
+  type: typeof MessageType.APPEND_CONVERSATION;
+  payload: {
+    noteId: string;
+    turn: { question: string; answer: string };
+  };
+}
+
+export interface CreateTopicMessage {
+  type: typeof MessageType.CREATE_TOPIC;
+  payload: { name: string };
+}
+
+export interface AssignTopicMessage {
+  type: typeof MessageType.ASSIGN_TOPIC;
+  payload: { noteId: string; topicId: string };
+}
+
 export type ExtensionMessage =
   | SignInMessage
   | SignOutMessage
@@ -113,7 +169,13 @@ export type ExtensionMessage =
   | NoteSavedMessage
   | TopicAssignedMessage
   | SuggestTopicMessage
-  | NoteUpdatedMessage;
+  | NoteUpdatedMessage
+  | SaveNoteMessage
+  | DeleteNoteMessage
+  | MergeResponsesMessage
+  | AppendConversationMessage
+  | CreateTopicMessage
+  | AssignTopicMessage;
 
 export interface AuthResponse {
   success: boolean;
