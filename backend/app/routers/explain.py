@@ -198,8 +198,9 @@ async def stream_explain(
         async for token in stream_fn(user_prompt, system_prompt):  # type: ignore[call-arg]
             yield ServerSentEvent(raw_data=token)
     except Exception as exc:
-        # Surface provider errors to the client so the UI can display them
-        yield ServerSentEvent(raw_data=f"[ERROR] {exc}")
+        import sys
+        print(f"[bubb] Stream error: {exc}", file=sys.stderr)
+        yield ServerSentEvent(raw_data="[ERROR] AI provider temporarily unavailable")
 
 
 @router.post("/explain", response_model=ExplainResponse)
