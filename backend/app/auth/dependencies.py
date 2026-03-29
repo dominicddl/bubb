@@ -1,7 +1,10 @@
 import jwt
+import structlog
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.config import settings
+
+logger = structlog.get_logger()
 
 security = HTTPBearer(auto_error=False)
 
@@ -30,6 +33,7 @@ async def get_current_user(
 ) -> dict:
     """Extract and validate Supabase JWT. Returns decoded token payload."""
     if cred is None:
+        logger.warning("auth_failure", reason="missing")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Bearer authentication required",
@@ -44,11 +48,13 @@ async def get_current_user(
         )
         return payload
     except jwt.ExpiredSignatureError:
+        logger.warning("auth_failure", reason="expired")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token expired",
         )
     except jwt.PyJWTError:
+        logger.warning("auth_failure", reason="invalid")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",

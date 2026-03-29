@@ -1,12 +1,15 @@
 """Tiered rate limiting for the bubb API."""
 
 import jwt
+import structlog
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
+
+logger = structlog.get_logger()
 
 
 def _is_authenticated(request: Request) -> bool:
@@ -75,6 +78,11 @@ limiter = Limiter(key_func=_get_user_id_or_ip, default_limits=[])
 
 def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
     """Return a clean JSON 429 response with retry_after."""
+    logger.warning(
+        "rate_limit_exceeded",
+        endpoint=request.url.path,
+        detail=exc.detail,
+    )
     return JSONResponse(
         status_code=429,
         content={

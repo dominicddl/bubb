@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterable
 
+import structlog
 from fastapi import APIRouter, Depends, Request
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from anthropic import AsyncAnthropic
@@ -15,6 +16,8 @@ from app.models.explain import (
     Provider,
     StreamExplainRequest,
 )
+
+logger = structlog.get_logger()
 
 router = APIRouter()
 
@@ -194,12 +197,12 @@ async def stream_explain(
             )
 
     stream_fn = STREAM_PROVIDERS[provider]
+    logger.info("ai_provider_call", provider=provider, depth=body.depth)
     try:
         async for token in stream_fn(user_prompt, system_prompt):  # type: ignore[call-arg]
             yield ServerSentEvent(raw_data=token)
     except Exception as exc:
-        import sys
-        print(f"[bubb] Stream error: {exc}", file=sys.stderr)
+        logger.error("stream_error", provider=provider, error=str(exc))
         yield ServerSentEvent(raw_data="[ERROR] AI provider temporarily unavailable")
 
 
@@ -218,5 +221,6 @@ async def explain_text(
     provider: Provider = body.provider or settings.default_ai_provider  # type: ignore[assignment]
     user_prompt = _build_user_prompt(body)
     call_fn = PROVIDERS[provider]
+    logger.info("ai_provider_call", provider=provider, depth="standard")
     explanation = await call_fn(user_prompt)
     return ExplainResponse(explanation=explanation, provider=provider)

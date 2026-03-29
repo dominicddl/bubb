@@ -1,3 +1,4 @@
+import structlog
 from fastapi import APIRouter, Depends, Request
 from supabase import create_client
 
@@ -10,6 +11,8 @@ from app.models.topics import (
     TopicSuggestionRequest,
     TopicSuggestionResponse,
 )
+
+logger = structlog.get_logger()
 
 router = APIRouter()
 
@@ -88,6 +91,7 @@ async def suggest_topic(
 
     # Default to openai gpt-4o-mini; short non-streaming call
     provider = body.provider or "openai"
+    logger.info("ai_provider_call", provider=provider, action="topic_suggestion")
 
     if provider == "openai":
         client = AsyncOpenAI(api_key=settings.openai_api_key)
