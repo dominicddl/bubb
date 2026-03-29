@@ -83,6 +83,14 @@ async def test_rate_limit_429_response_format(client):
 @pytest.mark.asyncio
 async def test_health_endpoint_not_rate_limited(client):
     """GET /api/health is never rate limited."""
-    for _ in range(100):
-        response = await client.get("/api/health")
-        assert response.status_code == 200
+    from unittest.mock import MagicMock
+
+    mock_supabase = MagicMock()
+    mock_result = MagicMock()
+    mock_result.data = [{"id": "test"}]
+    mock_supabase.table.return_value.select.return_value.limit.return_value.execute.return_value = mock_result
+
+    with patch("app.routers.health.get_supabase", return_value=mock_supabase):
+        for _ in range(100):
+            response = await client.get("/api/health")
+            assert response.status_code == 200

@@ -1,11 +1,18 @@
 import pytest
+from unittest.mock import MagicMock, patch
 
 
 @pytest.mark.asyncio
 async def test_health_check(client):
-    response = await client.get("/api/health")
+    mock_supabase = MagicMock()
+    mock_result = MagicMock()
+    mock_result.data = [{"id": "test"}]
+    mock_supabase.table.return_value.select.return_value.limit.return_value.execute.return_value = mock_result
+
+    with patch("app.routers.health.get_supabase", return_value=mock_supabase):
+        response = await client.get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json()["status"] == "ok"
 
 
 @pytest.mark.asyncio
@@ -44,3 +51,35 @@ async def test_health_auth_invalid_token(client):
         headers={"Authorization": "Bearer garbage-token"},
     )
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_health_check_returns_database_connected(client):
+    """GET /api/health returns database: connected when DB is reachable."""
+    mock_supabase = MagicMock()
+    mock_result = MagicMock()
+    mock_result.data = [{"status": 1}]
+    mock_supabase.table.return_value.select.return_value.limit.return_value.execute.return_value = mock_result
+
+    with patch("app.routers.health.get_supabase", return_value=mock_supabase):
+        response = await client.get("/api/health")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["database"] == "connected"
+
+
+@pytest.mark.asyncio
+async def test_health_check_returns_503_when_db_unreachable(client):
+    """GET /api/health returns 503 with database: unreachable when DB is down."""
+    mock_supabase = MagicMock()
+    mock_supabase.table.return_value.select.return_value.limit.return_value.execute.side_effect = Exception("connection refused")
+
+    with patch("app.routers.health.get_supabase", return_value=mock_supabase):
+        response = await client.get("/api/health")
+
+    assert response.status_code == 503
+    data = response.json()
+    assert data["status"] == "degraded"
+    assert data["database"] == "unreachable"
