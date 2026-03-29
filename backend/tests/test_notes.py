@@ -134,3 +134,104 @@ async def test_create_note_duplicate(client, valid_token):
     assert data["id"] == "existing-456"
     assert data["is_duplicate"] is True
     assert data["has_topic"] is True
+
+
+@pytest.mark.asyncio
+async def test_delete_note_requires_auth(client):
+    """DELETE /api/notes/{id} without auth returns 401."""
+    response = await client.delete("/api/notes/some-id")
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_delete_note(client, valid_token):
+    """DELETE /api/notes/{id} deletes the note."""
+    mock_supabase = MagicMock()
+    mock_delete_result = MagicMock()
+    mock_delete_result.data = [{"id": "note-123"}]
+    (
+        mock_supabase.table.return_value
+        .delete.return_value
+        .eq.return_value
+        .eq.return_value
+        .execute.return_value
+    ) = mock_delete_result
+
+    with patch("app.routers.notes.get_supabase", return_value=mock_supabase):
+        response = await client.delete(
+            "/api/notes/note-123",
+            headers={"Authorization": f"Bearer {valid_token}"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_merge_responses_requires_auth(client):
+    """POST /api/notes/{id}/responses without auth returns 401."""
+    response = await client.post(
+        "/api/notes/some-id/responses",
+        json={"responses": {"standard": "more detail"}},
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_merge_responses(client, valid_token):
+    """POST /api/notes/{id}/responses calls merge_note_responses RPC."""
+    mock_supabase = MagicMock()
+    mock_rpc_result = MagicMock()
+    mock_rpc_result.data = None
+    (
+        mock_supabase.rpc.return_value
+        .execute.return_value
+    ) = mock_rpc_result
+
+    with patch("app.routers.notes.get_supabase", return_value=mock_supabase):
+        response = await client.post(
+            "/api/notes/note-123/responses",
+            json={"responses": {"standard": "detailed explanation"}},
+            headers={"Authorization": f"Bearer {valid_token}"},
+        )
+
+    assert response.status_code == 200
+    mock_supabase.rpc.assert_called_once_with(
+        "merge_note_responses",
+        {"note_id": "note-123", "new_responses": {"standard": "detailed explanation"}},
+    )
+
+
+@pytest.mark.asyncio
+async def test_append_conversation_requires_auth(client):
+    """POST /api/notes/{id}/conversation without auth returns 401."""
+    response = await client.post(
+        "/api/notes/some-id/conversation",
+        json={"turn": {"question": "why?", "answer": "because"}},
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_append_conversation(client, valid_token):
+    """POST /api/notes/{id}/conversation calls append_conversation_turn RPC."""
+    mock_supabase = MagicMock()
+    mock_rpc_result = MagicMock()
+    mock_rpc_result.data = None
+    (
+        mock_supabase.rpc.return_value
+        .execute.return_value
+    ) = mock_rpc_result
+
+    with patch("app.routers.notes.get_supabase", return_value=mock_supabase):
+        response = await client.post(
+            "/api/notes/note-123/conversation",
+            json={"turn": {"question": "What is X?", "answer": "X is Y."}},
+            headers={"Authorization": f"Bearer {valid_token}"},
+        )
+
+    assert response.status_code == 200
+    mock_supabase.rpc.assert_called_once_with(
+        "append_conversation_turn",
+        {"note_id": "note-123", "turn": {"question": "What is X?", "answer": "X is Y."}},
+    )

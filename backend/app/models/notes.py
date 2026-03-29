@@ -32,3 +32,11 @@ class CreateNoteResponse(BaseModel):
     id: str
     is_duplicate: bool
     has_topic: bool
+
+
+class MergeResponsesRequest(BaseModel):
+    responses: dict
+
+
+class AppendConversationRequest(BaseModel):
+    turn: dict

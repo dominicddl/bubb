@@ -3,7 +3,15 @@ from supabase import create_client
 
 from app.auth.dependencies import get_current_user
 from app.config import settings
-from app.models.notes import AssignTopicRequest, CreateNoteRequest, CreateNoteResponse, NoteCountResponse, NoteResponse
+from app.models.notes import (
+    AppendConversationRequest,
+    AssignTopicRequest,
+    CreateNoteRequest,
+    CreateNoteResponse,
+    MergeResponsesRequest,
+    NoteCountResponse,
+    NoteResponse,
+)
 
 router = APIRouter()
 
@@ -111,6 +119,47 @@ async def count_notes(
         .execute()
     )
     return NoteCountResponse(count=result.count or 0)
+
+
+@router.delete("/notes/{note_id}", status_code=status.HTTP_200_OK)
+async def delete_note(
+    note_id: str,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Delete a note owned by the authenticated user."""
+    supabase = get_supabase()
+    supabase.table("notes").delete().eq("id", note_id).eq("user_id", user["sub"]).execute()
+    return {"status": "ok"}
+
+
+@router.post("/notes/{note_id}/responses", status_code=status.HTTP_200_OK)
+async def merge_responses(
+    note_id: str,
+    body: MergeResponsesRequest,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Merge additional depth responses into a note's responses JSONB column."""
+    supabase = get_supabase()
+    supabase.rpc(
+        "merge_note_responses",
+        {"note_id": note_id, "new_responses": body.responses},
+    ).execute()
+    return {"status": "ok"}
+
+
+@router.post("/notes/{note_id}/conversation", status_code=status.HTTP_200_OK)
+async def append_conversation(
+    note_id: str,
+    body: AppendConversationRequest,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Append a conversation turn to a note's conversation_history JSONB array."""
+    supabase = get_supabase()
+    supabase.rpc(
+        "append_conversation_turn",
+        {"note_id": note_id, "turn": body.turn},
+    ).execute()
+    return {"status": "ok"}
 
 
 @router.patch("/notes/{note_id}/topic", status_code=status.HTTP_200_OK)
