@@ -21,6 +21,7 @@ export const MessageType = {
   APPEND_CONVERSATION: 'APPEND_CONVERSATION',
   CREATE_TOPIC: 'CREATE_TOPIC',
   ASSIGN_TOPIC: 'ASSIGN_TOPIC',
+  DELETE_TOPIC: 'DELETE_TOPIC',
 } as const;
 
 export type MessageTypeValue = (typeof MessageType)[keyof typeof MessageType];
@@ -159,6 +160,11 @@ export interface AssignTopicMessage {
   payload: { noteId: string; topicId: string };
 }
 
+export interface DeleteTopicMessage {
+  type: typeof MessageType.DELETE_TOPIC;
+  payload: { topicId: string };
+}
+
 export type ExtensionMessage =
   | SignInMessage
   | SignOutMessage
@@ -175,7 +181,8 @@ export type ExtensionMessage =
   | MergeResponsesMessage
   | AppendConversationMessage
   | CreateTopicMessage
-  | AssignTopicMessage;
+  | AssignTopicMessage
+  | DeleteTopicMessage;
 
 export interface AuthResponse {
   success: boolean;
@@ -197,6 +204,7 @@ export type Provider = 'openai' | 'anthropic' | 'google';
 export interface ConversationTurn {
   question: string;
   answer: string;
+  depth?: string;
 }
 
 export interface StreamRequestPayload {

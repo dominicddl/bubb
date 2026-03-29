@@ -4,19 +4,15 @@ import { useSidePanelStore } from '../stores/sidePanelStore';
 
 interface SidePanelHeaderProps {
   userName: string;
-  noteCount: number;
-  isLoadingCount: boolean;
 }
 
-export function SidePanelHeader({ userName, noteCount, isLoadingCount }: SidePanelHeaderProps) {
+export function SidePanelHeader({ userName }: SidePanelHeaderProps) {
   const toggleSearch = useSidePanelStore((s) => s.toggleSearch);
 
   const parts = userName.split(' ');
   const initials = parts.length >= 2
     ? `${parts[0][0]}${parts[1][0]}`.toUpperCase()
     : userName.slice(0, 2).toUpperCase();
-
-  const noteLabel = noteCount === 1 ? '1 note' : `${noteCount} notes`;
 
   return (
     <div
@@ -34,21 +30,8 @@ export function SidePanelHeader({ userName, noteCount, isLoadingCount }: SidePan
         </span>
       </div>
 
-      {/* Right: Note count + search + avatar */}
+      {/* Right: search + avatar */}
       <div className="flex items-center gap-2.5">
-        {/* Note count */}
-        <span
-          className="text-[11px]"
-          style={{
-            fontFamily: 'var(--font-mono)',
-            color: 'hsl(var(--accent-green))',
-            opacity: isLoadingCount ? 0.4 : 1,
-            transition: 'opacity 0.2s',
-          }}
-        >
-          {isLoadingCount ? '— notes' : noteLabel}
-        </span>
-
         {/* Search icon button */}
         <button
           type="button"
