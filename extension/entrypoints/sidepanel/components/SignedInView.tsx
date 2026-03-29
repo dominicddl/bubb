@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { LogOut } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
+import { MessageType } from '@/lib/messaging';
 import { useCurrentTab } from '../hooks/useCurrentTab';
-import { usePageNotes, useNoteCount } from '../hooks/useNotes';
+import { usePageNotes } from '../hooks/useNotes';
 import { useTopics } from '../hooks/useTopics';
 import { useSidePanelStore } from '../stores/sidePanelStore';
 import { SidePanelHeader } from './SidePanelHeader';
@@ -14,20 +16,28 @@ import { NoteListItem } from './NoteListItem';
 import { TopicListItem } from './TopicListItem';
 import { TopicDetailView } from './TopicDetailView';
 import { SearchOverlay } from './SearchOverlay';
+import { UndoToast } from './UndoToast';
 
 interface SignedInViewProps {
   userName: string;
   onSignOut: () => void;
 }
 
+interface PendingDelete {
+  type: 'note' | 'topic';
+  id: string;
+  label: string;
+}
+
 export function SignedInView({ userName, onSignOut }: SignedInViewProps) {
   const [showConfirm, setShowConfirm] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queryClient = useQueryClient();
 
   const tabInfo = useCurrentTab();
   const { data: pageNotes, isLoading: isLoadingPageNotes, error: pageNotesError } = usePageNotes(tabInfo?.url ?? null);
   const { data: topics, isLoading: isLoadingTopics, error: topicsError } = useTopics();
-  const { data: noteCount = 0, isLoading: isLoadingCount } = useNoteCount();
-
   const {
     activeTab,
     selectedTopicId,
@@ -37,8 +47,117 @@ export function SignedInView({ userName, onSignOut }: SignedInViewProps) {
     closeTopic,
   } = useSidePanelStore();
 
+  const pendingDeleteRef = useRef<PendingDelete | null>(null);
+
+  const fireDelete = useCallback((pending: PendingDelete) => {
+    const msg = pending.type === 'note'
+      ? { type: MessageType.DELETE_NOTE, payload: { noteId: pending.id } }
+      : { type: MessageType.DELETE_TOPIC, payload: { topicId: pending.id } };
+
+    chrome.runtime.sendMessage(msg).then((resp: { success: boolean }) => {
+      if (resp?.success) {
+        // Invalidate topics so note_count refreshes from server
+        queryClient.invalidateQueries({ queryKey: ['topics'] });
+      }
+    }).catch((err) => {
+      console.error(`[bubb] Failed to delete ${pending.type}:`, err);
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.invalidateQueries({ queryKey: ['topics'] });
+      queryClient.invalidateQueries({ queryKey: ['noteCount'] });
+    });
+  }, [queryClient]);
+
+  // Flush the previous pending delete immediately (used when spamming delete)
+  const flushPendingDelete = useCallback(() => {
+    if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+    const prev = pendingDeleteRef.current;
+    if (prev) {
+      fireDelete(prev);
+      pendingDeleteRef.current = null;
+    }
+  }, [fireDelete]);
+
+  const handleDeleteNote = useCallback((noteId: string) => {
+    // Execute any previous pending delete immediately
+    flushPendingDelete();
+
+    // Find the note's label and topic_id from cache
+    const allNoteQueries = queryClient.getQueriesData<{ id: string; highlighted_text: string; topic_id: string | null }[]>({ queryKey: ['notes'] });
+    let label = 'Note';
+    let topicId: string | null = null;
+    for (const [, data] of allNoteQueries) {
+      const found = data?.find((n) => n.id === noteId);
+      if (found) {
+        label = found.highlighted_text.length > 30
+          ? found.highlighted_text.slice(0, 30) + '...'
+          : found.highlighted_text;
+        topicId = found.topic_id;
+        break;
+      }
+    }
+
+    // Optimistically remove from all note caches
+    queryClient.setQueriesData<{ id: string }[]>({ queryKey: ['notes'] }, (old) =>
+      old ? old.filter((n) => n.id !== noteId) : old,
+    );
+    queryClient.setQueryData<number>(['noteCount'], (old) =>
+      old != null ? Math.max(0, old - 1) : old,
+    );
+
+    // Decrement the topic's note_count badge
+    if (topicId) {
+      queryClient.setQueryData<{ id: string; note_count: number }[]>(['topics'], (old) =>
+        old?.map((t) =>
+          t.id === topicId ? { ...t, note_count: Math.max(0, t.note_count - 1) } : t,
+        ),
+      );
+    }
+
+    const pending: PendingDelete = { type: 'note', id: noteId, label };
+    pendingDeleteRef.current = pending;
+    setPendingDelete(pending);
+  }, [queryClient, flushPendingDelete]);
+
+  const handleDeleteTopic = useCallback((topicId: string) => {
+    flushPendingDelete();
+
+    const topicsData = queryClient.getQueryData<{ id: string; name: string }[]>(['topics']);
+    const label = topicsData?.find((t) => t.id === topicId)?.name ?? 'Topic';
+
+    queryClient.setQueryData<{ id: string }[]>(['topics'], (old) =>
+      old ? old.filter((t) => t.id !== topicId) : old,
+    );
+
+    if (selectedTopicId === topicId) {
+      closeTopic();
+    }
+
+    const pending: PendingDelete = { type: 'topic', id: topicId, label };
+    pendingDeleteRef.current = pending;
+    setPendingDelete(pending);
+  }, [queryClient, selectedTopicId, closeTopic, flushPendingDelete]);
+
+  const handleUndoDelete = useCallback(() => {
+    if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+    pendingDeleteRef.current = null;
+    setPendingDelete(null);
+    // Refetch from server — item still exists there
+    queryClient.invalidateQueries({ queryKey: ['notes'] });
+    queryClient.invalidateQueries({ queryKey: ['topics'] });
+    queryClient.invalidateQueries({ queryKey: ['noteCount'] });
+  }, [queryClient]);
+
+  const handleDeleteExpire = useCallback(() => {
+    const pending = pendingDeleteRef.current;
+    if (pending) {
+      fireDelete(pending);
+      pendingDeleteRef.current = null;
+    }
+    setPendingDelete(null);
+  }, [fireDelete]);
+
   return (
-    <div className="flex flex-col min-h-[480px] overflow-hidden">
+    <div className="relative flex flex-col min-h-[480px] overflow-hidden">
       {/* Three-way conditional: search overlay, topic detail, or main view */}
       {isSearchOpen ? (
         <SearchOverlay />
@@ -47,14 +166,12 @@ export function SignedInView({ userName, onSignOut }: SignedInViewProps) {
           topicId={selectedTopicId}
           topicName={selectedTopicName!}
           onBack={closeTopic}
+          onDeleteTopic={handleDeleteTopic}
+          onDeleteNote={handleDeleteNote}
         />
       ) : (
         <>
-          <SidePanelHeader
-            userName={userName}
-            noteCount={noteCount}
-            isLoadingCount={isLoadingCount}
-          />
+          <SidePanelHeader userName={userName} />
 
           <TabNav />
 
@@ -74,7 +191,7 @@ export function SignedInView({ userName, onSignOut }: SignedInViewProps) {
               ) : pageNotes && pageNotes.length > 0 ? (
                 <ScrollArea className="flex-1">
                   {pageNotes.map((note) => (
-                    <NoteListItem key={note.id} note={note} />
+                    <NoteListItem key={note.id} note={note} onDelete={handleDeleteNote} />
                   ))}
                 </ScrollArea>
               ) : (
@@ -99,7 +216,7 @@ export function SignedInView({ userName, onSignOut }: SignedInViewProps) {
               ) : topics && topics.length > 0 ? (
                 <ScrollArea className="flex-1">
                   {topics.map((topic) => (
-                    <TopicListItem key={topic.id} topic={topic} onSelect={openTopic} />
+                    <TopicListItem key={topic.id} topic={topic} onSelect={openTopic} onDelete={handleDeleteTopic} />
                   ))}
                 </ScrollArea>
               ) : (
@@ -170,10 +287,23 @@ export function SignedInView({ userName, onSignOut }: SignedInViewProps) {
         </div>
       )}
 
+      {pendingDelete && (
+        <UndoToast
+          key={pendingDelete.id}
+          message={`Deleted "${pendingDelete.label}"`}
+          onUndo={handleUndoDelete}
+          onExpire={handleDeleteExpire}
+        />
+      )}
+
       <style>{`
         @keyframes fadeIn {
           from { opacity: 0; }
           to { opacity: 1; }
+        }
+        @keyframes slideUp {
+          from { transform: translateY(8px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
         }
       `}</style>
     </div>

@@ -3,7 +3,15 @@ from supabase import create_client
 
 from app.auth.dependencies import get_current_user
 from app.config import settings
-from app.models.notes import AssignTopicRequest, NoteCountResponse, NoteResponse
+from app.models.notes import (
+    AppendConversationRequest,
+    AssignTopicRequest,
+    CreateNoteRequest,
+    CreateNoteResponse,
+    MergeResponsesRequest,
+    NoteCountResponse,
+    NoteResponse,
+)
 
 router = APIRouter()
 
@@ -15,6 +23,56 @@ def get_supabase():
 def escape_ilike(s: str) -> str:
     """Escape wildcard characters for use in ILIKE queries."""
     return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+@router.post("/notes", response_model=CreateNoteResponse)
+async def create_note(
+    body: CreateNoteRequest,
+    user: dict = Depends(get_current_user),
+) -> CreateNoteResponse:
+    """Create a note with duplicate detection. If same highlighted_text + source_url
+    exists for this user, returns the existing note instead of inserting."""
+    supabase = get_supabase()
+    user_id = user["sub"]
+
+    # Check for duplicate
+    existing = (
+        supabase.table("notes")
+        .select("id, topic_id")
+        .eq("user_id", user_id)
+        .eq("highlighted_text", body.highlighted_text)
+        .eq("source_url", body.source_url)
+        .limit(1)
+        .execute()
+    )
+
+    if existing.data:
+        row = existing.data[0]
+        return CreateNoteResponse(
+            id=row["id"],
+            is_duplicate=True,
+            has_topic=row.get("topic_id") is not None,
+        )
+
+    # Insert new note
+    result = (
+        supabase.table("notes")
+        .insert({
+            "user_id": user_id,
+            "highlighted_text": body.highlighted_text,
+            "explanation": body.explanation,
+            "source_url": body.source_url,
+            "page_title": body.page_title,
+            "responses": body.responses,
+        })
+        .execute()
+    )
+
+    return CreateNoteResponse(
+        id=result.data[0]["id"],
+        is_duplicate=False,
+        has_topic=False,
+    )
 
 
 @router.get("/notes", response_model=list[NoteResponse])
@@ -61,16 +119,111 @@ async def count_notes(
     return NoteCountResponse(count=result.count or 0)
 
 
+@router.delete("/notes/{note_id}", status_code=status.HTTP_200_OK)
+async def delete_note(
+    note_id: str,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Delete a note owned by the authenticated user, decrementing topic count if assigned."""
+    supabase = get_supabase()
+    user_id = user["sub"]
+
+    # Read the note's topic before deleting so we can decrement count
+    note_result = (
+        supabase.table("notes")
+        .select("topic_id")
+        .eq("id", note_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    topic_id = note_result.data[0].get("topic_id") if note_result.data else None
+
+    supabase.table("notes").delete().eq("id", note_id).eq("user_id", user_id).execute()
+
+    # Decrement topic's note_count
+    if topic_id:
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        topic = supabase.table("topics").select("note_count").eq("id", topic_id).limit(1).execute()
+        if topic.data:
+            new_count = max((topic.data[0].get("note_count", 1)) - 1, 0)
+            supabase.table("topics").update({"note_count": new_count, "updated_at": now}).eq("id", topic_id).execute()
+
+    return {"status": "ok"}
+
+
+@router.post("/notes/{note_id}/responses", status_code=status.HTTP_200_OK)
+async def merge_responses(
+    note_id: str,
+    body: MergeResponsesRequest,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Merge additional depth responses into a note's responses JSONB column."""
+    supabase = get_supabase()
+    supabase.rpc(
+        "merge_note_responses",
+        {"note_id": note_id, "new_responses": body.responses},
+    ).execute()
+    return {"status": "ok"}
+
+
+@router.post("/notes/{note_id}/conversation", status_code=status.HTTP_200_OK)
+async def append_conversation(
+    note_id: str,
+    body: AppendConversationRequest,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Append a conversation turn to a note's conversation_history JSONB array."""
+    supabase = get_supabase()
+    supabase.rpc(
+        "append_conversation_turn",
+        {"note_id": note_id, "turn": body.turn},
+    ).execute()
+    return {"status": "ok"}
+
+
 @router.patch("/notes/{note_id}/topic", status_code=status.HTTP_200_OK)
 async def assign_topic(
     note_id: str,
     body: AssignTopicRequest,
     user: dict = Depends(get_current_user),
 ) -> dict:
-    """Atomically assign a topic to a note and update note_count via RPC."""
+    """Assign a topic to a note and update note_count on old/new topics."""
     supabase = get_supabase()
-    supabase.rpc(
-        "assign_topic_to_note",
-        {"p_note_id": note_id, "p_topic_id": body.topic_id},
-    ).execute()
+    user_id = user["sub"]
+
+    # Get current topic_id for the note
+    note_result = (
+        supabase.table("notes")
+        .select("topic_id")
+        .eq("id", note_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not note_result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found")
+
+    old_topic_id = note_result.data[0].get("topic_id")
+
+    # Update the note's topic
+    supabase.table("notes").update({"topic_id": body.topic_id}).eq("id", note_id).eq("user_id", user_id).execute()
+
+    # Decrement old topic's note_count
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+
+    if old_topic_id:
+        old_topic = supabase.table("topics").select("note_count").eq("id", old_topic_id).limit(1).execute()
+        if old_topic.data:
+            new_count = max((old_topic.data[0].get("note_count", 1)) - 1, 0)
+            supabase.table("topics").update({"note_count": new_count, "updated_at": now}).eq("id", old_topic_id).execute()
+
+    # Increment new topic's note_count
+    new_topic = supabase.table("topics").select("note_count").eq("id", body.topic_id).limit(1).execute()
+    if new_topic.data:
+        new_count = (new_topic.data[0].get("note_count", 0)) + 1
+        supabase.table("topics").update({"note_count": new_count, "updated_at": now}).eq("id", body.topic_id).execute()
+
     return {"status": "ok"}

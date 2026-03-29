@@ -1,5 +1,5 @@
 import { signInWithGoogle, signOut, getAuthState, verifyBackendConnection } from '@/lib/auth';
-import type { ExtensionMessage, AuthResponse, ExplainTextMessage, RenderLatexMessage, RenderLatexResponse, StreamRequestPayload, StreamPortMessage } from '@/lib/messaging';
+import type { ExtensionMessage, AuthResponse, ExplainTextMessage, RenderLatexMessage, RenderLatexResponse, StreamRequestPayload, StreamPortMessage, SaveNoteMessage, DeleteNoteMessage, MergeResponsesMessage, AppendConversationMessage, SuggestTopicMessage, CreateTopicMessage, AssignTopicMessage, DeleteTopicMessage } from '@/lib/messaging';
 import { MessageType, STREAM_PORT_NAME } from '@/lib/messaging';
 import katex from 'katex';
 import katexCss from 'katex/dist/katex.min.css?inline';
@@ -146,18 +146,28 @@ export default defineBackground({
 });
 
 /**
- * Broadcast auth state change to all open extension contexts (sidepanel, popup).
- * This ensures UI stays in sync when auth changes happen in the background.
+ * Broadcast auth state change to ALL open contexts (sidepanel, popup, AND content scripts).
+ * chrome.runtime.sendMessage reaches extension pages; chrome.tabs.sendMessage reaches content scripts.
  */
 function broadcastAuthStateChanged(
   isAuthenticated: boolean,
   user: { id: string; email: string; name: string } | null,
 ) {
-  chrome.runtime.sendMessage({
+  const message = {
     type: MessageType.AUTH_STATE_CHANGED,
     payload: { isAuthenticated, user },
-  }).catch(() => {
-    // Ignore errors when no listeners are active (e.g., sidepanel is closed)
+  };
+
+  // Broadcast to extension pages (side panel, popup)
+  chrome.runtime.sendMessage(message).catch(() => {});
+
+  // Broadcast to all content scripts so open popups update auth state
+  chrome.tabs.query({}).then((tabs) => {
+    for (const tab of tabs) {
+      if (tab.id) {
+        chrome.tabs.sendMessage(tab.id, message).catch(() => {});
+      }
+    }
   });
 }
 
@@ -254,6 +264,244 @@ async function handleMessage(message: ExtensionMessage): Promise<AuthResponse> {
 
         const data = await resp.json();
         return { success: true, explanation: data.explanation } as unknown as AuthResponse;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Network error';
+        return { success: false, error: msg };
+      }
+    }
+
+    case MessageType.SAVE_NOTE: {
+      console.log('[bubb] SAVE_NOTE handler entered');
+      const { highlighted_text, explanation, source_url, page_title, responses } =
+        (message as SaveNoteMessage).payload;
+      const BACKEND_URL = import.meta.env.WXT_BACKEND_URL || 'http://127.0.0.1:8000';
+
+      try {
+        const { data: { session } } = await getSupabase().auth.getSession();
+        console.log('[bubb] SAVE_NOTE session:', session ? 'exists' : 'null');
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
+        console.log('[bubb] SAVE_NOTE fetching:', `${BACKEND_URL}/api/notes`);
+        const resp = await fetch(`${BACKEND_URL}/api/notes`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            highlighted_text,
+            explanation,
+            source_url,
+            page_title,
+            responses,
+          }),
+        });
+
+        console.log('[bubb] SAVE_NOTE response status:', resp.status);
+        if (!resp.ok) {
+          return { success: false, error: `API error: ${resp.status}` } as AuthResponse;
+        }
+
+        const data = await resp.json();
+        return { success: true, ...data } as unknown as AuthResponse;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Network error';
+        console.error('[bubb] SAVE_NOTE error:', msg);
+        return { success: false, error: msg };
+      }
+    }
+
+    case MessageType.DELETE_NOTE: {
+      const { noteId } = (message as DeleteNoteMessage).payload;
+      const BACKEND_URL = import.meta.env.WXT_BACKEND_URL || 'http://127.0.0.1:8000';
+
+      try {
+        const { data: { session } } = await getSupabase().auth.getSession();
+        const headers: Record<string, string> = {};
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
+        const resp = await fetch(`${BACKEND_URL}/api/notes/${noteId}`, {
+          method: 'DELETE',
+          headers,
+        });
+
+        if (!resp.ok) {
+          return { success: false, error: `API error: ${resp.status}` } as AuthResponse;
+        }
+
+        return { success: true } as AuthResponse;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Network error';
+        return { success: false, error: msg };
+      }
+    }
+
+    case MessageType.MERGE_RESPONSES: {
+      const { noteId, responses } = (message as MergeResponsesMessage).payload;
+      const BACKEND_URL = import.meta.env.WXT_BACKEND_URL || 'http://127.0.0.1:8000';
+
+      try {
+        const { data: { session } } = await getSupabase().auth.getSession();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
+        const resp = await fetch(`${BACKEND_URL}/api/notes/${noteId}/responses`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ responses }),
+        });
+
+        if (!resp.ok) {
+          return { success: false, error: `API error: ${resp.status}` } as AuthResponse;
+        }
+
+        return { success: true } as AuthResponse;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Network error';
+        return { success: false, error: msg };
+      }
+    }
+
+    case MessageType.APPEND_CONVERSATION: {
+      const { noteId, turn } = (message as AppendConversationMessage).payload;
+      const BACKEND_URL = import.meta.env.WXT_BACKEND_URL || 'http://127.0.0.1:8000';
+
+      try {
+        const { data: { session } } = await getSupabase().auth.getSession();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
+        const resp = await fetch(`${BACKEND_URL}/api/notes/${noteId}/conversation`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ turn }),
+        });
+
+        if (!resp.ok) {
+          return { success: false, error: `API error: ${resp.status}` } as AuthResponse;
+        }
+
+        return { success: true } as AuthResponse;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Network error';
+        return { success: false, error: msg };
+      }
+    }
+
+    case MessageType.SUGGEST_TOPIC: {
+      const { highlighted_text, explanation, existing_topics } =
+        (message as SuggestTopicMessage).payload;
+      const BACKEND_URL = import.meta.env.WXT_BACKEND_URL || 'http://127.0.0.1:8000';
+
+      try {
+        const { data: { session } } = await getSupabase().auth.getSession();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
+        const resp = await fetch(`${BACKEND_URL}/api/topics/suggest`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ highlighted_text, explanation, existing_topics }),
+        });
+
+        if (!resp.ok) {
+          return { success: false, error: `API error: ${resp.status}` } as AuthResponse;
+        }
+
+        const data = await resp.json();
+        return { success: true, ...data } as unknown as AuthResponse;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Network error';
+        return { success: false, error: msg };
+      }
+    }
+
+    case MessageType.CREATE_TOPIC: {
+      const { name } = (message as CreateTopicMessage).payload;
+      const BACKEND_URL = import.meta.env.WXT_BACKEND_URL || 'http://127.0.0.1:8000';
+
+      try {
+        const { data: { session } } = await getSupabase().auth.getSession();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
+        const resp = await fetch(`${BACKEND_URL}/api/topics`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ name }),
+        });
+
+        if (!resp.ok) {
+          return { success: false, error: `API error: ${resp.status}` } as AuthResponse;
+        }
+
+        const data = await resp.json();
+        return { success: true, id: data.id } as unknown as AuthResponse;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Network error';
+        return { success: false, error: msg };
+      }
+    }
+
+    case MessageType.ASSIGN_TOPIC: {
+      const { noteId, topicId } = (message as AssignTopicMessage).payload;
+      const BACKEND_URL = import.meta.env.WXT_BACKEND_URL || 'http://127.0.0.1:8000';
+
+      try {
+        const { data: { session } } = await getSupabase().auth.getSession();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
+        const resp = await fetch(`${BACKEND_URL}/api/notes/${noteId}/topic`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ topic_id: topicId }),
+        });
+
+        if (!resp.ok) {
+          return { success: false, error: `API error: ${resp.status}` } as AuthResponse;
+        }
+
+        return { success: true } as AuthResponse;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Network error';
+        return { success: false, error: msg };
+      }
+    }
+
+    case MessageType.DELETE_TOPIC: {
+      const { topicId } = (message as DeleteTopicMessage).payload;
+      const BACKEND_URL = import.meta.env.WXT_BACKEND_URL || 'http://127.0.0.1:8000';
+
+      try {
+        const { data: { session } } = await getSupabase().auth.getSession();
+        const headers: Record<string, string> = {};
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
+        const resp = await fetch(`${BACKEND_URL}/api/topics/${topicId}`, {
+          method: 'DELETE',
+          headers,
+        });
+
+        if (!resp.ok) {
+          return { success: false, error: `API error: ${resp.status}` } as AuthResponse;
+        }
+
+        return { success: true } as AuthResponse;
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Network error';
         return { success: false, error: msg };

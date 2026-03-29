@@ -1,4 +1,4 @@
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Trash2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from './EmptyState';
@@ -9,9 +9,11 @@ interface TopicDetailViewProps {
   topicId: string;
   topicName: string;
   onBack: () => void;
+  onDeleteTopic?: (topicId: string) => void;
+  onDeleteNote?: (noteId: string) => void;
 }
 
-export function TopicDetailView({ topicId, topicName, onBack }: TopicDetailViewProps) {
+export function TopicDetailView({ topicId, topicName, onBack, onDeleteTopic, onDeleteNote }: TopicDetailViewProps) {
   const { data: notes, isLoading, error } = useTopicNotes(topicId);
 
   const noteCount = notes?.length ?? 0;
@@ -40,7 +42,7 @@ export function TopicDetailView({ topicId, topicName, onBack }: TopicDetailViewP
           <ArrowLeft size={20} />
         </button>
 
-        <div className="flex items-baseline gap-2 min-w-0">
+        <div className="flex items-baseline gap-2 min-w-0 flex-1">
           <span
             className="text-[17px] font-semibold truncate"
             style={{ color: 'hsl(24 10% 16%)', fontFamily: 'var(--font-sans)' }}
@@ -56,6 +58,18 @@ export function TopicDetailView({ topicId, topicName, onBack }: TopicDetailViewP
             </span>
           )}
         </div>
+
+        {onDeleteTopic && (
+          <button
+            type="button"
+            onClick={() => onDeleteTopic(topicId)}
+            aria-label="Delete topic"
+            className="flex items-center justify-center w-[28px] h-[28px] rounded-md hover:bg-[hsl(var(--muted))] transition-colors shrink-0"
+            style={{ color: 'hsl(24 5% 52%)' }}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Content */}
@@ -73,7 +87,7 @@ export function TopicDetailView({ topicId, topicName, onBack }: TopicDetailViewP
       ) : notes && notes.length > 0 ? (
         <ScrollArea className="flex-1">
           {notes.map((note) => (
-            <NoteListItem key={note.id} note={note} showSourceUrl={true} />
+            <NoteListItem key={note.id} note={note} showSourceUrl={true} onDelete={onDeleteNote} />
           ))}
         </ScrollArea>
       ) : (
