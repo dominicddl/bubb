@@ -65,13 +65,11 @@ async def create_note(
             "page_title": body.page_title,
             "responses": body.responses,
         })
-        .select("id")
-        .single()
         .execute()
     )
 
     return CreateNoteResponse(
-        id=result.data["id"],
+        id=result.data[0]["id"],
         is_duplicate=False,
         has_topic=False,
     )
@@ -126,9 +124,32 @@ async def delete_note(
     note_id: str,
     user: dict = Depends(get_current_user),
 ) -> dict:
-    """Delete a note owned by the authenticated user."""
+    """Delete a note owned by the authenticated user, decrementing topic count if assigned."""
     supabase = get_supabase()
-    supabase.table("notes").delete().eq("id", note_id).eq("user_id", user["sub"]).execute()
+    user_id = user["sub"]
+
+    # Read the note's topic before deleting so we can decrement count
+    note_result = (
+        supabase.table("notes")
+        .select("topic_id")
+        .eq("id", note_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    topic_id = note_result.data[0].get("topic_id") if note_result.data else None
+
+    supabase.table("notes").delete().eq("id", note_id).eq("user_id", user_id).execute()
+
+    # Decrement topic's note_count
+    if topic_id:
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        topic = supabase.table("topics").select("note_count").eq("id", topic_id).limit(1).execute()
+        if topic.data:
+            new_count = max((topic.data[0].get("note_count", 1)) - 1, 0)
+            supabase.table("topics").update({"note_count": new_count, "updated_at": now}).eq("id", topic_id).execute()
+
     return {"status": "ok"}
 
 
@@ -168,10 +189,41 @@ async def assign_topic(
     body: AssignTopicRequest,
     user: dict = Depends(get_current_user),
 ) -> dict:
-    """Atomically assign a topic to a note and update note_count via RPC."""
+    """Assign a topic to a note and update note_count on old/new topics."""
     supabase = get_supabase()
-    supabase.rpc(
-        "assign_topic_to_note",
-        {"p_note_id": note_id, "p_topic_id": body.topic_id},
-    ).execute()
+    user_id = user["sub"]
+
+    # Get current topic_id for the note
+    note_result = (
+        supabase.table("notes")
+        .select("topic_id")
+        .eq("id", note_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not note_result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found")
+
+    old_topic_id = note_result.data[0].get("topic_id")
+
+    # Update the note's topic
+    supabase.table("notes").update({"topic_id": body.topic_id}).eq("id", note_id).eq("user_id", user_id).execute()
+
+    # Decrement old topic's note_count
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+
+    if old_topic_id:
+        old_topic = supabase.table("topics").select("note_count").eq("id", old_topic_id).limit(1).execute()
+        if old_topic.data:
+            new_count = max((old_topic.data[0].get("note_count", 1)) - 1, 0)
+            supabase.table("topics").update({"note_count": new_count, "updated_at": now}).eq("id", old_topic_id).execute()
+
+    # Increment new topic's note_count
+    new_topic = supabase.table("topics").select("note_count").eq("id", body.topic_id).limit(1).execute()
+    if new_topic.data:
+        new_count = (new_topic.data[0].get("note_count", 0)) + 1
+        supabase.table("topics").update({"note_count": new_count, "updated_at": now}).eq("id", body.topic_id).execute()
+
     return {"status": "ok"}

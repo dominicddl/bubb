@@ -126,8 +126,8 @@ export function TopicSuggestionChip({
       ) : (
         <div className="flex flex-1 items-center gap-[6px]">
           <span
-            className="inline-flex items-center px-[8px] py-[3px] rounded-full text-[11px] font-semibold text-[hsl(var(--foreground))] border border-[hsl(var(--accent-gold))] truncate max-w-[160px]"
-            style={{ background: 'hsl(38 60% 52% / 0.12)' }}
+            className="inline-flex items-center px-[8px] py-[3px] rounded-full text-[11px] font-semibold text-[hsl(var(--foreground))] border border-[hsl(var(--accent-gold))]"
+            style={{ background: 'hsl(38 60% 52% / 0.12)', whiteSpace: 'normal', wordBreak: 'break-word' }}
           >
             {suggestedTopic}
           </span>
