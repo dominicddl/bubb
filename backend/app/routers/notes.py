@@ -63,7 +63,7 @@ async def create_note(
     )
 
     return CreateNoteResponse(
-        id=result.data[0]["id"],
+        id=result.data["id"],
         is_duplicate=False,
         has_topic=False,
     )

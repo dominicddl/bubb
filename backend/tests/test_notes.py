@@ -71,7 +71,7 @@ async def test_create_note_new(client, valid_token):
 
     # Insert returns new note
     mock_insert_result = MagicMock()
-    mock_insert_result.data = [{"id": "new-note-123"}]
+    mock_insert_result.data = {"id": "new-note-123"}
     (
         mock_supabase.table.return_value
         .insert.return_value
