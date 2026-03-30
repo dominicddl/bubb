@@ -72,7 +72,7 @@ def mock_supabase_health():
     mock_result = MagicMock()
     mock_result.data = [{"id": "test"}]
     mock_supabase.table.return_value.select.return_value.limit.return_value.execute.return_value = mock_result
-    with patch("app.routers.health.get_supabase", return_value=mock_supabase):
+    with patch("app.routers.health.get_supabase_admin", return_value=mock_supabase):
         yield mock_supabase
 
 

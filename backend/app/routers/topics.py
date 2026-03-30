@@ -1,8 +1,8 @@
 import structlog
 from fastapi import APIRouter, Depends, Request, HTTPException, status
-from supabase import create_client
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_user_token
+from app.auth.supabase import get_supabase
 from app.rate_limit import limiter, CRUD_LIMIT, WRITE_LIMIT, AI_LIMIT_AUTH, _get_user_id
 from app.config import settings
 from app.models.topics import (
@@ -28,18 +28,15 @@ TOPIC_SUGGESTION_PROMPT = (
 )
 
 
-def get_supabase():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
-
-
 @router.get("/topics", response_model=list[TopicResponse])
 @limiter.limit(CRUD_LIMIT, key_func=_get_user_id)
 async def list_topics(
     request: Request,
     user: dict = Depends(get_current_user),
+    token: str = Depends(get_user_token),
 ) -> list[TopicResponse]:
     """List all topics for the authenticated user ordered by updated_at desc."""
-    supabase = get_supabase()
+    supabase = get_supabase(token)
     result = (
         supabase.table("topics")
         .select("*")
@@ -56,9 +53,10 @@ async def create_topic(
     request: Request,
     body: CreateTopicRequest,
     user: dict = Depends(get_current_user),
+    token: str = Depends(get_user_token),
 ) -> TopicResponse:
     """Create a new topic for the authenticated user, reusing existing if name matches."""
-    supabase = get_supabase()
+    supabase = get_supabase(token)
     user_id = user["sub"]
 
     # Check for existing topic with same name (case-insensitive)
@@ -85,12 +83,13 @@ async def create_topic(
 async def delete_topic(
     topic_id: str,
     user: dict = Depends(get_current_user),
+    token: str = Depends(get_user_token),
 ) -> dict:
     """Delete a topic owned by the authenticated user.
 
     Notes in this topic are kept but their topic_id is set to NULL.
     """
-    supabase = get_supabase()
+    supabase = get_supabase(token)
     user_id = user["sub"]
 
     # Verify ownership
@@ -126,11 +125,12 @@ async def suggest_topic(
     request: Request,
     body: TopicSuggestionRequest,
     user: dict = Depends(get_current_user),
+    token: str = Depends(get_user_token),
 ) -> TopicSuggestionResponse:
     """AI-powered topic suggestion that reuses existing topics when possible."""
     from openai import AsyncOpenAI
 
-    supabase = get_supabase()
+    supabase = get_supabase(token)
 
     # Limit to 30 existing topics to avoid prompt bloat (Pitfall 6)
     limited_topics = body.existing_topics[:30]

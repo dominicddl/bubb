@@ -90,7 +90,7 @@ async def test_health_endpoint_not_rate_limited(client):
     mock_result.data = [{"id": "test"}]
     mock_supabase.table.return_value.select.return_value.limit.return_value.execute.return_value = mock_result
 
-    with patch("app.routers.health.get_supabase", return_value=mock_supabase):
+    with patch("app.routers.health.get_supabase_admin", return_value=mock_supabase):
         for _ in range(100):
             response = await client.get("/api/health")
             assert response.status_code == 200

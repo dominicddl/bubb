@@ -9,7 +9,7 @@ async def test_health_check(client):
     mock_result.data = [{"id": "test"}]
     mock_supabase.table.return_value.select.return_value.limit.return_value.execute.return_value = mock_result
 
-    with patch("app.routers.health.get_supabase", return_value=mock_supabase):
+    with patch("app.routers.health.get_supabase_admin", return_value=mock_supabase):
         response = await client.get("/api/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
@@ -61,7 +61,7 @@ async def test_health_check_returns_database_connected(client):
     mock_result.data = [{"status": 1}]
     mock_supabase.table.return_value.select.return_value.limit.return_value.execute.return_value = mock_result
 
-    with patch("app.routers.health.get_supabase", return_value=mock_supabase):
+    with patch("app.routers.health.get_supabase_admin", return_value=mock_supabase):
         response = await client.get("/api/health")
 
     assert response.status_code == 200
@@ -76,7 +76,7 @@ async def test_health_check_returns_503_when_db_unreachable(client):
     mock_supabase = MagicMock()
     mock_supabase.table.return_value.select.return_value.limit.return_value.execute.side_effect = Exception("connection refused")
 
-    with patch("app.routers.health.get_supabase", return_value=mock_supabase):
+    with patch("app.routers.health.get_supabase_admin", return_value=mock_supabase):
         response = await client.get("/api/health")
 
     assert response.status_code == 503
