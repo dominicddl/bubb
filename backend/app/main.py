@@ -1,7 +1,6 @@
 import time
 import uuid
 
-import jwt
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -42,18 +41,14 @@ app.include_router(topics.router, prefix="/api", tags=["topics"])
 
 def _extract_user_id(request: Request) -> str:
     """Extract user_id from JWT if present, else return 'anonymous'."""
+    from app.auth.dependencies import _decode_token
+
     auth = request.headers.get("authorization", "")
     if auth.startswith("Bearer "):
-        token = auth[7:]
         try:
-            payload = jwt.decode(
-                token,
-                settings.supabase_jwt_secret,
-                audience="authenticated",
-                algorithms=["HS256"],
-            )
+            payload = _decode_token(auth[7:])
             return payload.get("sub", "anonymous")
-        except jwt.PyJWTError:
+        except Exception:
             pass
     return "anonymous"
 

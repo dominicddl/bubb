@@ -16,30 +16,30 @@ def mock_providers_for_rate_limit():
         yield
 
 
-# --- AI tier: 10/minute per user ---
+# --- AI tier: 30/minute auth, 5/minute unauth ---
 
 @pytest.mark.asyncio
-async def test_explain_rate_limited_after_10_requests(client):
-    """POST /api/explain returns 429 after 10 requests in a minute (unauth uses IP key)."""
+async def test_explain_rate_limited_after_unauth_limit(client):
+    """POST /api/explain returns 429 after 5 requests in a minute (unauth uses IP key)."""
     body = {
         "text": "hello",
         "context": "ctx",
         "source_url": "https://example.com",
         "page_title": "Test",
     }
-    # First 3 requests should succeed (unauth AI limit is 3/min)
-    for i in range(3):
+    # First 5 requests should succeed (unauth AI limit is 5/min)
+    for i in range(5):
         response = await client.post("/api/explain", json=body)
         assert response.status_code == 200, f"Request {i+1} failed unexpectedly"
 
-    # 4th request should be rate limited
+    # 6th request should be rate limited
     response = await client.post("/api/explain", json=body)
     assert response.status_code == 429
 
 
 @pytest.mark.asyncio
-async def test_explain_auth_rate_limited_after_10_requests(client, valid_token):
-    """POST /api/explain with auth returns 429 after 10 requests."""
+async def test_explain_auth_rate_limited_after_auth_limit(client, valid_token):
+    """POST /api/explain with auth returns 429 after 30 requests."""
     body = {
         "text": "hello",
         "context": "ctx",
@@ -48,11 +48,11 @@ async def test_explain_auth_rate_limited_after_10_requests(client, valid_token):
     }
     headers = {"Authorization": f"Bearer {valid_token}"}
 
-    for i in range(10):
+    for i in range(30):
         response = await client.post("/api/explain", json=body, headers=headers)
         assert response.status_code == 200, f"Request {i+1} failed unexpectedly"
 
-    # 11th request should be rate limited
+    # 31st request should be rate limited
     response = await client.post("/api/explain", json=body, headers=headers)
     assert response.status_code == 429
 
@@ -66,8 +66,8 @@ async def test_rate_limit_429_response_format(client):
         "source_url": "https://example.com",
         "page_title": "Test",
     }
-    # Exhaust unauth limit (3/min)
-    for _ in range(3):
+    # Exhaust unauth limit (5/min)
+    for _ in range(5):
         await client.post("/api/explain", json=body)
 
     response = await client.post("/api/explain", json=body)
