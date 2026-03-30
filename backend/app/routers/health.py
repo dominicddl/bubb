@@ -14,10 +14,10 @@ async def health_check():
         supabase = get_supabase_admin()
         supabase.table("notes").select("id").limit(1).execute()
         return {"status": "ok", "database": "connected"}
-    except Exception:
+    except Exception as e:
         return JSONResponse(
             status_code=503,
-            content={"status": "degraded", "database": "unreachable"},
+            content={"status": "degraded", "database": "unreachable", "error": str(e)},
         )
 
 
