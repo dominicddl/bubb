@@ -86,7 +86,7 @@ async def test_request_middleware_logs_completion(client, mock_supabase_health, 
 
     captured = capsys.readouterr()
     lines = [line for line in captured.out.strip().split("\n") if line]
-    completed_lines = [json.loads(l) for l in lines if "request_completed" in l]
+    completed_lines = [json.loads(line) for line in lines if "request_completed" in line]
     assert len(completed_lines) >= 1
     log = completed_lines[0]
     assert log["method"] == "GET"
@@ -111,7 +111,7 @@ async def test_request_middleware_includes_user_id_when_authenticated(
 
     captured = capsys.readouterr()
     lines = [line for line in captured.out.strip().split("\n") if line]
-    completed_lines = [json.loads(l) for l in lines if "request_completed" in l]
+    completed_lines = [json.loads(line) for line in lines if "request_completed" in line]
     assert len(completed_lines) >= 1
     log = completed_lines[0]
     assert log["user_id"] == TEST_USER_ID
@@ -127,7 +127,7 @@ async def test_request_middleware_anonymous_when_no_token(client, mock_supabase_
 
     captured = capsys.readouterr()
     lines = [line for line in captured.out.strip().split("\n") if line]
-    completed_lines = [json.loads(l) for l in lines if "request_completed" in l]
+    completed_lines = [json.loads(line) for line in lines if "request_completed" in line]
     assert len(completed_lines) >= 1
     log = completed_lines[0]
     assert log["user_id"] == "anonymous"
