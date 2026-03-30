@@ -20,15 +20,13 @@ def mock_all_providers():
     """Mock all AI providers so no real API calls are made."""
     mock_anthropic = AsyncMock(return_value="Mocked explanation.")
     mock_openai = AsyncMock(return_value="Mocked explanation.")
-    mock_google = AsyncMock(return_value="Mocked explanation.")
 
     providers = {
         "anthropic": mock_anthropic,
         "openai": mock_openai,
-        "google": mock_google,
     }
     with patch.dict("app.routers.explain.PROVIDERS", providers):
-        yield {"anthropic": mock_anthropic, "openai": mock_openai, "google": mock_google}
+        yield {"anthropic": mock_anthropic, "openai": mock_openai}
 
 
 @pytest.mark.asyncio
@@ -98,7 +96,7 @@ async def test_explain_request_model_validates_all_fields(client):
 @pytest.mark.asyncio
 async def test_explain_provider_selection(client, mock_all_providers):
     """Provider field routes to the correct AI provider."""
-    for provider in ["anthropic", "openai", "google"]:
+    for provider in ["anthropic", "openai"]:
         mock_all_providers[provider].return_value = f"Response from {provider}"
         response = await client.post("/api/explain", json={**VALID_BODY, "provider": provider})
 

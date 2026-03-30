@@ -10,7 +10,6 @@ def mock_providers_for_validation():
     providers = {
         "anthropic": AsyncMock(return_value="Mocked."),
         "openai": AsyncMock(return_value="Mocked."),
-        "google": AsyncMock(return_value="Mocked."),
     }
     with patch.dict("app.routers.explain.PROVIDERS", providers):
         yield

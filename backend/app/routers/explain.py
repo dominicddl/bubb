@@ -1,11 +1,10 @@
 from collections.abc import AsyncIterable
 
 import structlog
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
-from google import genai
 
 from app.auth.dependencies import get_optional_user
 from app.rate_limit import limiter, _get_user_id_or_ip, _ai_limit_value
@@ -31,7 +30,6 @@ SYSTEM_PROMPT = (
 MODELS: dict[Provider, str] = {
     "anthropic": "claude-haiku-4-5-20251001",
     "openai": "gpt-4o-mini",
-    "google": "gemini-2.0-flash",
 }
 
 
@@ -69,19 +67,9 @@ async def _call_openai(user_prompt: str) -> str:
     return response.choices[0].message.content or ""
 
 
-async def _call_google(user_prompt: str) -> str:
-    client = genai.Client(api_key=settings.gemini_api_key)
-    response = await client.aio.models.generate_content(
-        model=MODELS["google"],
-        contents=f"{SYSTEM_PROMPT}\n\n{user_prompt}",
-    )
-    return response.text or ""
-
-
 PROVIDERS = {
     "anthropic": _call_anthropic,
     "openai": _call_openai,
-    "google": _call_google,
 }
 
 
@@ -140,19 +128,9 @@ async def _stream_anthropic(user_prompt: str, system_prompt: str) -> AsyncIterab
             yield token
 
 
-async def _stream_google(user_prompt: str, system_prompt: str) -> AsyncIterable[str]:
-    client = genai.Client(api_key=settings.gemini_api_key)
-    response = await client.aio.models.generate_content(
-        model=MODELS["google"],
-        contents=f"{system_prompt}\n\n{user_prompt}",
-    )
-    yield response.text or ""
-
-
 STREAM_PROVIDERS: dict[str, object] = {
     "openai": _stream_openai,
     "anthropic": _stream_anthropic,
-    "google": _stream_google,
 }
 
 
@@ -222,5 +200,12 @@ async def explain_text(
     user_prompt = _build_user_prompt(body)
     call_fn = PROVIDERS[provider]
     logger.info("ai_provider_call", provider=provider, depth="standard")
-    explanation = await call_fn(user_prompt)
+    try:
+        explanation = await call_fn(user_prompt)
+    except Exception as exc:
+        logger.error("ai_provider_error", provider=provider, error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI provider temporarily unavailable. Please try again.",
+        )
     return ExplainResponse(explanation=explanation, provider=provider)

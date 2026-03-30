@@ -146,35 +146,32 @@ async def suggest_topic(
     provider = body.provider or "openai"
     logger.info("ai_provider_call", provider=provider, action="topic_suggestion")
 
-    if provider == "openai":
-        client = AsyncOpenAI(api_key=settings.openai_api_key)
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            temperature=0.3,
-            max_tokens=30,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        suggestion = (response.choices[0].message.content or "").strip()
-    elif provider == "anthropic":
-        from anthropic import AsyncAnthropic
+    try:
+        if provider == "openai":
+            client = AsyncOpenAI(api_key=settings.openai_api_key)
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                temperature=0.3,
+                max_tokens=30,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            suggestion = (response.choices[0].message.content or "").strip()
+        else:
+            from anthropic import AsyncAnthropic
 
-        client = AsyncAnthropic(api_key=settings.anthropic_api_key)
-        response = await client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=30,
-            messages=[{"role": "user", "content": prompt}],
+            client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+            response = await client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=30,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            suggestion = (response.content[0].text if response.content else "").strip()
+    except Exception as exc:
+        logger.error("ai_provider_error", provider=provider, error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI provider temporarily unavailable. Please try again.",
         )
-        suggestion = (response.content[0].text if response.content else "").strip()
-    else:
-        # google provider
-        from google import genai
-
-        client = genai.Client(api_key=settings.gemini_api_key)
-        response = await client.aio.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-        )
-        suggestion = (response.text or "").strip()
 
     # Case-insensitive match against ALL user's topics in the DB
     match_result = (

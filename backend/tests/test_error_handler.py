@@ -33,7 +33,6 @@ async def test_sse_stream_error_does_not_leak_exception(client):
     stream_providers = {
         "openai": _failing_stream,
         "anthropic": _failing_stream,
-        "google": _failing_stream,
     }
 
     with patch.dict("app.routers.explain.STREAM_PROVIDERS", stream_providers):

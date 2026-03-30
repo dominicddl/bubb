@@ -11,7 +11,6 @@ def mock_providers_for_rate_limit():
     providers = {
         "anthropic": AsyncMock(return_value="Mocked."),
         "openai": mock_openai,
-        "google": AsyncMock(return_value="Mocked."),
     }
     with patch.dict("app.routers.explain.PROVIDERS", providers):
         yield

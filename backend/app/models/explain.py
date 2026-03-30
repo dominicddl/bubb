@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-Provider = Literal["anthropic", "openai", "google"]
+Provider = Literal["anthropic", "openai"]
 
 
 class ExplainRequest(BaseModel):
