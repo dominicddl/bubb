@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { Trash2 } from 'lucide-react';
 import type { Note } from '../hooks/useNotes';
 import { NoteChatThread } from './NoteChatThread';
 
@@ -41,9 +42,10 @@ interface NoteListItemProps {
   note: Note;
   showSourceUrl?: boolean;
   searchQuery?: string;
+  onDelete?: (noteId: string) => void;
 }
 
-export function NoteListItem({ note, showSourceUrl, searchQuery }: NoteListItemProps) {
+export function NoteListItem({ note, showSourceUrl, searchQuery, onDelete }: NoteListItemProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('simple');
 
@@ -66,13 +68,13 @@ export function NoteListItem({ note, showSourceUrl, searchQuery }: NoteListItemP
           setIsExpanded((prev) => !prev);
         }
       }}
-      className="cursor-pointer"
+      className="cursor-pointer group"
       style={{
         padding: '8px 28px',
         borderBottom: '1px solid hsl(var(--border))',
       }}
     >
-      {/* Line 1: highlighted_text + timestamp */}
+      {/* Line 1: highlighted_text + timestamp + delete */}
       <div className="flex items-baseline justify-between gap-2">
         <span
           className="text-[13px] font-semibold truncate"
@@ -80,18 +82,34 @@ export function NoteListItem({ note, showSourceUrl, searchQuery }: NoteListItemP
         >
           {searchQuery ? highlightText(note.highlighted_text, searchQuery) : note.highlighted_text}
         </span>
-        <span
-          className="text-[11px] shrink-0"
-          style={{ color: 'hsl(24 5% 52%)', fontFamily: 'var(--font-mono)' }}
-        >
-          {timeAgo(note.created_at)}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span
+            className="text-[11px]"
+            style={{ color: 'hsl(24 5% 52%)', fontFamily: 'var(--font-mono)' }}
+          >
+            {timeAgo(note.created_at)}
+          </span>
+          {onDelete && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(note.id);
+              }}
+              aria-label="Delete note"
+              className="flex items-center justify-center w-[20px] h-[20px] rounded opacity-0 group-hover:opacity-100 hover:!opacity-100 hover:bg-[hsl(var(--muted))] transition-all"
+              style={{ color: 'hsl(24 5% 52%)' }}
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Depth tabs — only shown when expanded and rich */}
       {isExpanded && isRichNote && (
         <div className="flex gap-1 mt-2 mb-1">
-          {Object.keys(note.responses).map((depth) => (
+          {['simple', 'standard', 'deep'].filter((d) => d in note.responses).map((depth) => (
             <button
               key={depth}
               onClick={(e) => {
@@ -132,7 +150,11 @@ export function NoteListItem({ note, showSourceUrl, searchQuery }: NoteListItemP
       </p>
 
       {isExpanded && isRichNote && (
-        <NoteChatThread turns={note.conversation_history} />
+        <NoteChatThread
+          turns={note.conversation_history.filter(
+            (t) => !t.depth || t.depth === activeTab
+          )}
+        />
       )}
 
       {/* Source URL link */}

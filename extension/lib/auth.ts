@@ -31,6 +31,9 @@ export async function signInWithGoogle(): Promise<AuthResult> {
       throw new Error('OAuth2 client_id not configured in manifest.');
     }
 
+    // Remember which tab the user was on so we can return to it after auth
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
     // Generate a nonce for ID token verification
     const nonce = crypto.randomUUID();
 
@@ -82,6 +85,12 @@ export async function signInWithGoogle(): Promise<AuthResult> {
           }
 
           const user = data.user;
+
+          // Return focus to the tab the user was on before sign-in
+          if (activeTab?.id) {
+            chrome.tabs.update(activeTab.id, { active: true });
+          }
+
           resolve({
             success: true,
             user: {

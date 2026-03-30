@@ -1,5 +1,5 @@
 import structlog
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, HTTPException, status
 from supabase import create_client
 
 from app.auth.dependencies import get_current_user
@@ -57,14 +57,67 @@ async def create_topic(
     body: CreateTopicRequest,
     user: dict = Depends(get_current_user),
 ) -> TopicResponse:
-    """Create a new topic for the authenticated user."""
+    """Create a new topic for the authenticated user, reusing existing if name matches."""
     supabase = get_supabase()
+    user_id = user["sub"]
+
+    # Check for existing topic with same name (case-insensitive)
+    existing = (
+        supabase.table("topics")
+        .select("*")
+        .eq("user_id", user_id)
+        .ilike("name", body.name)
+        .limit(1)
+        .execute()
+    )
+    if existing.data:
+        return TopicResponse(**existing.data[0])
+
     result = (
         supabase.table("topics")
-        .insert({"name": body.name, "user_id": user["sub"]})
+        .insert({"name": body.name, "user_id": user_id})
         .execute()
     )
     return TopicResponse(**result.data[0])
+
+
+@router.delete("/topics/{topic_id}", status_code=status.HTTP_200_OK)
+async def delete_topic(
+    topic_id: str,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Delete a topic owned by the authenticated user.
+
+    Notes in this topic are kept but their topic_id is set to NULL.
+    """
+    supabase = get_supabase()
+    user_id = user["sub"]
+
+    # Verify ownership
+    existing = (
+        supabase.table("topics")
+        .select("id")
+        .eq("id", topic_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not existing.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found"
+        )
+
+    # Orphan notes that belong to this topic
+    supabase.table("notes").update({"topic_id": None}).eq(
+        "topic_id", topic_id
+    ).eq("user_id", user_id).execute()
+
+    # Delete the topic
+    supabase.table("topics").delete().eq("id", topic_id).eq(
+        "user_id", user_id
+    ).execute()
+
+    return {"status": "ok"}
 
 
 @router.post("/topics/suggest", response_model=TopicSuggestionResponse)

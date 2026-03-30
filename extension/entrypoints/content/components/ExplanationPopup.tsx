@@ -10,7 +10,6 @@ import { MessageType } from '@/lib/messaging';
 import type { DepthLevel, Provider, ConversationTurn } from '@/lib/messaging';
 import type { StreamPort } from '../lib/streaming';
 import { openStreamPort } from '../lib/streaming';
-import { getSupabase } from '@/lib/supabase';
 
 interface ExplanationPopupProps {
   selectedText: string;
@@ -74,14 +73,53 @@ export function ExplanationPopup({
     providerRef.current = activeProvider;
   }, [activeProvider]);
 
-  // Auth state
+  // Auth state — check on mount and listen for changes from background
   useEffect(() => {
     chrome.runtime.sendMessage({ type: MessageType.GET_AUTH_STATE })
       .then((response: { isAuthenticated?: boolean }) => {
         setIsSignedIn(!!response?.isAuthenticated);
       })
       .catch(() => setIsSignedIn(false));
-  }, []);
+
+    const authListener = (message: { type: string; payload?: { isAuthenticated?: boolean } }) => {
+      if (message.type === MessageType.AUTH_STATE_CHANGED && message.payload?.isAuthenticated) {
+        setIsSignedIn(true);
+        setSaveError(false);
+        // If we have unsaved content, retry the save immediately
+        if (saveAttemptedRef.current && depthCache.simple.length > 0) {
+          (async () => {
+            try {
+              const saveResponse = await chrome.runtime.sendMessage({
+                type: MessageType.SAVE_NOTE,
+                payload: {
+                  highlighted_text: selectedText,
+                  explanation: depthCache.simple,
+                  source_url: sourceUrl,
+                  page_title: pageTitle,
+                  responses: { simple: depthCache.simple },
+                },
+              });
+              if (saveResponse?.success) {
+                setNoteId(saveResponse.id);
+                chrome.runtime.sendMessage({
+                  type: MessageType.NOTE_SAVED,
+                  payload: { noteId: saveResponse.id },
+                }).catch(() => {});
+              } else {
+                setSaveError(true);
+              }
+            } catch {
+              setSaveError(true);
+            }
+          })();
+        }
+      } else if (message.type === MessageType.AUTH_STATE_CHANGED) {
+        setIsSignedIn(false);
+      }
+    };
+    chrome.runtime.onMessage.addListener(authListener);
+    return () => chrome.runtime.onMessage.removeListener(authListener);
+  }, [depthCache.simple, selectedText, sourceUrl, pageTitle]);
 
   // Delay spinner to avoid flash for fast responses
   useEffect(() => {
@@ -229,53 +267,33 @@ export function ExplanationPopup({
       saveAttemptedRef.current = true;
       const saveNote = async () => {
         try {
-          const { data: { session } } = await getSupabase().auth.getSession();
-          if (!session?.user) {
-            setIsSignedIn(false);
+          // Save note via background → backend
+          const saveResponse = await chrome.runtime.sendMessage({
+            type: MessageType.SAVE_NOTE,
+            payload: {
+              highlighted_text: selectedText,
+              explanation: depthCache.simple,
+              source_url: sourceUrl,
+              page_title: pageTitle,
+              responses: { simple: depthCache.simple },
+            },
+          });
+
+          if (!saveResponse?.success) {
+            console.error('[bubb] Failed to save note:', saveResponse?.error);
+            setSaveError(true);
+            if (saveResponse?.error?.includes('401')) {
+              setIsSignedIn(false);
+            }
             return;
           }
 
           setIsSignedIn(true);
+          const savedNoteId = saveResponse.id;
+          setNoteId(savedNoteId);
 
-          // Check for duplicate — same highlighted text on same URL
-          const { data: existing } = await getSupabase()
-            .from('notes')
-            .select('id, topic_id')
-            .eq('highlighted_text', selectedText)
-            .eq('source_url', sourceUrl)
-            .limit(1)
-            .maybeSingle();
-
-          let savedNoteId: string;
-
-          if (existing) {
-            // Already saved — reuse existing note, skip insert
-            savedNoteId = existing.id;
-            setNoteId(savedNoteId);
-            // Skip topic suggestion if note already has a topic
-            if (existing.topic_id) return;
-          } else {
-            const { data, error: insertError } = await getSupabase()
-              .from('notes')
-              .insert({
-                highlighted_text: selectedText,
-                explanation: depthCache.simple,
-                source_url: sourceUrl,
-                page_title: pageTitle,
-                responses: { simple: depthCache.simple },
-              })
-              .select('id')
-              .single();
-
-            if (insertError || !data) {
-              console.error('[bubb] Failed to save note:', insertError);
-              setSaveError(true);
-              return;
-            }
-
-            savedNoteId = data.id;
-            setNoteId(savedNoteId);
-          }
+          // If duplicate with existing topic, skip topic suggestion
+          if (saveResponse.is_duplicate && saveResponse.has_topic) return;
 
           // Broadcast NOTE_SAVED to side panel
           chrome.runtime.sendMessage({
@@ -283,31 +301,23 @@ export function ExplanationPopup({
             payload: { noteId: savedNoteId },
           }).catch(() => {});
 
-          // Fetch topic suggestion via background script (avoids CORS)
+          // Fetch topic suggestion via background → backend
           setIsLoadingTopic(true);
           try {
-            const { data: existingTopics } = await getSupabase()
-              .from('topics')
-              .select('name')
-              .order('updated_at', { ascending: false })
-              .limit(30);
-
-            const topicNames = (existingTopics ?? []).map((t: { name: string }) => t.name);
-
-            const response = await chrome.runtime.sendMessage({
+            const topicResponse = await chrome.runtime.sendMessage({
               type: MessageType.SUGGEST_TOPIC,
               payload: {
                 highlighted_text: selectedText,
                 explanation: depthCache.simple,
-                existing_topics: topicNames,
+                existing_topics: [],
               },
             });
 
-            if (response?.success) {
+            if (topicResponse?.success) {
               setTopicSuggestion({
-                suggestedTopic: response.suggested_topic,
-                isExisting: response.is_existing,
-                existingTopicId: response.existing_topic_id ?? null,
+                suggestedTopic: topicResponse.suggested_topic,
+                isExisting: topicResponse.is_existing,
+                existingTopicId: topicResponse.existing_topic_id ?? null,
               });
             }
           } catch (err) {
@@ -330,15 +340,13 @@ export function ExplanationPopup({
     prevDepthStreamingRef.current = depthStreaming;
 
     for (const depth of ['standard', 'deep'] as const) {
-      // Detect transition: was streaming → now done, and has content
       if (prev[depth] && !depthStreaming[depth] && depthCache[depth].length > 0) {
         const responseData = { [depth]: depthCache[depth] };
 
         if (noteId) {
-          // Note exists — merge immediately
-          getSupabase().rpc('merge_note_responses', {
-            note_id: noteId,
-            new_responses: responseData,
+          chrome.runtime.sendMessage({
+            type: MessageType.MERGE_RESPONSES,
+            payload: { noteId, responses: responseData },
           }).then(() => {
             chrome.runtime.sendMessage({
               type: MessageType.NOTE_UPDATED,
@@ -348,7 +356,6 @@ export function ExplanationPopup({
             console.warn(`[bubb] Failed to save ${depth} response:`, err);
           });
         } else {
-          // Note not yet created — queue for later flush
           pendingResponsesRef.current = { ...pendingResponsesRef.current, ...responseData };
         }
       }
@@ -363,9 +370,9 @@ export function ExplanationPopup({
     if (Object.keys(pendingResponsesRef.current).length > 0) {
       const pending = pendingResponsesRef.current;
       pendingResponsesRef.current = {};
-      getSupabase().rpc('merge_note_responses', {
-        note_id: noteId,
-        new_responses: pending,
+      chrome.runtime.sendMessage({
+        type: MessageType.MERGE_RESPONSES,
+        payload: { noteId, responses: pending },
       }).then(() => {
         chrome.runtime.sendMessage({
           type: MessageType.NOTE_UPDATED,
@@ -380,9 +387,9 @@ export function ExplanationPopup({
       pendingChatTurnsRef.current = [];
       (async () => {
         for (const turn of turns) {
-          await getSupabase().rpc('append_conversation_turn', {
-            note_id: noteId,
-            turn,
+          await chrome.runtime.sendMessage({
+            type: MessageType.APPEND_CONVERSATION,
+            payload: { noteId, turn },
           }).catch((err) => console.warn('[bubb] Failed to flush chat turn:', err));
         }
         chrome.runtime.sendMessage({
@@ -394,9 +401,6 @@ export function ExplanationPopup({
   }, [noteId]);
 
   // Save chat turns to DB when follow-up responses finish streaming
-  // Track the streaming state of the last turn to detect the streaming→done transition.
-  // Length-based detection doesn't work: when the turn is added (length increases),
-  // isStreaming is still true; when streaming ends, length hasn't changed.
   const prevLastTurnStreamingRef = useRef(false);
   useEffect(() => {
     if (thread.length === 0) {
@@ -408,14 +412,13 @@ export function ExplanationPopup({
     const wasStreaming = prevLastTurnStreamingRef.current;
     prevLastTurnStreamingRef.current = lastTurn.isStreaming;
 
-    // Detect transition: was streaming → now done, and has content
     if (wasStreaming && !lastTurn.isStreaming && lastTurn.answer.length > 0) {
-      const completedTurn = { question: lastTurn.question, answer: lastTurn.answer };
+      const completedTurn = { question: lastTurn.question, answer: lastTurn.answer, depth: activeDepth };
 
       if (noteId) {
-        getSupabase().rpc('append_conversation_turn', {
-          note_id: noteId,
-          turn: completedTurn,
+        chrome.runtime.sendMessage({
+          type: MessageType.APPEND_CONVERSATION,
+          payload: { noteId, turn: completedTurn },
         }).then(() => {
           chrome.runtime.sendMessage({
             type: MessageType.NOTE_UPDATED,
@@ -428,7 +431,7 @@ export function ExplanationPopup({
         pendingChatTurnsRef.current = [...pendingChatTurnsRef.current, completedTurn];
       }
     }
-  }, [thread, noteId]);
+  }, [thread, noteId, activeDepth]);
 
   const handleDepthChange = useCallback((newDepth: DepthLevel) => {
     setActiveDepth(newDepth);
@@ -488,7 +491,15 @@ export function ExplanationPopup({
   const handleUndo = async () => {
     if (!noteId) return;
     try {
-      await getSupabase().from('notes').delete().eq('id', noteId);
+      await chrome.runtime.sendMessage({
+        type: MessageType.DELETE_NOTE,
+        payload: { noteId },
+      });
+      // Notify side panel to refresh its notes list
+      chrome.runtime.sendMessage({
+        type: MessageType.NOTE_UPDATED,
+        payload: { noteId },
+      }).catch(() => {});
       setNoteId(null);
     } catch (err) {
       console.error('[bubb] Undo failed:', err);
@@ -503,39 +514,40 @@ export function ExplanationPopup({
     if (!depthCache.simple) return;
     setSaveError(false);
     try {
-      const { data, error: insertError } = await getSupabase()
-        .from('notes')
-        .insert({
+      const saveResponse = await chrome.runtime.sendMessage({
+        type: MessageType.SAVE_NOTE,
+        payload: {
           highlighted_text: selectedText,
           explanation: depthCache.simple,
           source_url: sourceUrl,
           page_title: pageTitle,
           responses: { simple: depthCache.simple },
-        })
-        .select('id')
-        .single();
+        },
+      });
 
-      if (insertError) {
+      if (!saveResponse?.success) {
         setSaveError(true);
-      } else {
-        setNoteId(data.id);
-        // Flush any pending depth responses
-        if (Object.keys(pendingResponsesRef.current).length > 0) {
-          await getSupabase().rpc('merge_note_responses', {
-            note_id: data.id,
-            new_responses: pendingResponsesRef.current,
-          });
-          pendingResponsesRef.current = {};
-        }
-        // Flush any pending chat turns
-        for (const turn of pendingChatTurnsRef.current) {
-          await getSupabase().rpc('append_conversation_turn', {
-            note_id: data.id,
-            turn,
-          });
-        }
-        pendingChatTurnsRef.current = [];
+        return;
       }
+
+      setNoteId(saveResponse.id);
+
+      // Flush any pending depth responses
+      if (Object.keys(pendingResponsesRef.current).length > 0) {
+        await chrome.runtime.sendMessage({
+          type: MessageType.MERGE_RESPONSES,
+          payload: { noteId: saveResponse.id, responses: pendingResponsesRef.current },
+        });
+        pendingResponsesRef.current = {};
+      }
+      // Flush any pending chat turns
+      for (const turn of pendingChatTurnsRef.current) {
+        await chrome.runtime.sendMessage({
+          type: MessageType.APPEND_CONVERSATION,
+          payload: { noteId: saveResponse.id, turn },
+        });
+      }
+      pendingChatTurnsRef.current = [];
     } catch {
       setSaveError(true);
     }
@@ -601,12 +613,12 @@ export function ExplanationPopup({
             saveError={saveError}
           />
         )}
-        {noteId && showTopicSpinner && (
+        {isSignedIn && noteId && showTopicSpinner && (
           <div className="flex items-center justify-center border-t border-[hsl(var(--border))] px-[16px] py-[8px]">
             <div className="w-3 h-3 border-2 border-[hsl(var(--muted-foreground))] border-t-transparent rounded-full animate-spin" />
           </div>
         )}
-        {noteId && topicSuggestion && !topicFlowComplete && (
+        {isSignedIn && noteId && topicSuggestion && !topicFlowComplete && (
           <TopicSuggestionChip
             noteId={noteId}
             suggestedTopic={topicSuggestion.suggestedTopic}
