@@ -52,5 +52,14 @@ async def client():
         yield ac
 
 
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    """Reset rate limiter state between tests to prevent cross-test leakage."""
+    from app.rate_limit import limiter
+    limiter._storage.reset()
+    yield
+    limiter._storage.reset()
+
+
 def pytest_configure(config):
     config.addinivalue_line("markers", "rls: requires local Supabase instance")

@@ -32,14 +32,9 @@ def mock_all_stream_providers():
         for token in ["mocked", " response"]:
             yield token
 
-    async def mock_google_stream(user_prompt: str, system_prompt: str) -> AsyncIterable[str]:
-        for token in ["mocked", " response"]:
-            yield token
-
     providers = {
         "openai": mock_openai_stream,
         "anthropic": mock_anthropic_stream,
-        "google": mock_google_stream,
     }
     with patch.dict("app.routers.explain.STREAM_PROVIDERS", providers):
         yield providers

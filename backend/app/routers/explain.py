@@ -1,12 +1,13 @@
 from collections.abc import AsyncIterable
 
-from fastapi import APIRouter, Depends
+import structlog
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
-from google import genai
 
 from app.auth.dependencies import get_optional_user
+from app.rate_limit import limiter, _get_user_id_or_ip, _ai_limit_value
 from app.config import settings
 from app.models.explain import (
     ExplainRequest,
@@ -14,6 +15,8 @@ from app.models.explain import (
     Provider,
     StreamExplainRequest,
 )
+
+logger = structlog.get_logger()
 
 router = APIRouter()
 
@@ -27,7 +30,6 @@ SYSTEM_PROMPT = (
 MODELS: dict[Provider, str] = {
     "anthropic": "claude-haiku-4-5-20251001",
     "openai": "gpt-4o-mini",
-    "google": "gemini-2.0-flash",
 }
 
 
@@ -65,19 +67,9 @@ async def _call_openai(user_prompt: str) -> str:
     return response.choices[0].message.content or ""
 
 
-async def _call_google(user_prompt: str) -> str:
-    client = genai.Client(api_key=settings.gemini_api_key)
-    response = await client.aio.models.generate_content(
-        model=MODELS["google"],
-        contents=f"{SYSTEM_PROMPT}\n\n{user_prompt}",
-    )
-    return response.text or ""
-
-
 PROVIDERS = {
     "anthropic": _call_anthropic,
     "openai": _call_openai,
-    "google": _call_google,
 }
 
 
@@ -136,19 +128,9 @@ async def _stream_anthropic(user_prompt: str, system_prompt: str) -> AsyncIterab
             yield token
 
 
-async def _stream_google(user_prompt: str, system_prompt: str) -> AsyncIterable[str]:
-    client = genai.Client(api_key=settings.gemini_api_key)
-    response = await client.aio.models.generate_content(
-        model=MODELS["google"],
-        contents=f"{system_prompt}\n\n{user_prompt}",
-    )
-    yield response.text or ""
-
-
 STREAM_PROVIDERS: dict[str, object] = {
     "openai": _stream_openai,
     "anthropic": _stream_anthropic,
-    "google": _stream_google,
 }
 
 
@@ -162,7 +144,9 @@ def _build_stream_user_prompt(body: StreamExplainRequest) -> str:
 
 
 @router.post("/explain/stream", response_class=EventSourceResponse)
+@limiter.limit(_ai_limit_value, key_func=_get_user_id_or_ip)
 async def stream_explain(
+    request: Request,
     body: StreamExplainRequest,
     user: dict | None = Depends(get_optional_user),
 ) -> AsyncIterable[ServerSentEvent]:
@@ -191,16 +175,19 @@ async def stream_explain(
             )
 
     stream_fn = STREAM_PROVIDERS[provider]
+    logger.info("ai_provider_call", provider=provider, depth=body.depth)
     try:
         async for token in stream_fn(user_prompt, system_prompt):  # type: ignore[call-arg]
             yield ServerSentEvent(raw_data=token)
     except Exception as exc:
-        # Surface provider errors to the client so the UI can display them
-        yield ServerSentEvent(raw_data=f"[ERROR] {exc}")
+        logger.error("stream_error", provider=provider, error=str(exc))
+        yield ServerSentEvent(raw_data="[ERROR] AI provider temporarily unavailable")
 
 
 @router.post("/explain", response_model=ExplainResponse)
+@limiter.limit(_ai_limit_value, key_func=_get_user_id_or_ip)
 async def explain_text(
+    request: Request,
     body: ExplainRequest,
     user: dict | None = Depends(get_optional_user),
 ) -> ExplainResponse:
@@ -212,5 +199,13 @@ async def explain_text(
     provider: Provider = body.provider or settings.default_ai_provider  # type: ignore[assignment]
     user_prompt = _build_user_prompt(body)
     call_fn = PROVIDERS[provider]
-    explanation = await call_fn(user_prompt)
+    logger.info("ai_provider_call", provider=provider, depth="standard")
+    try:
+        explanation = await call_fn(user_prompt)
+    except Exception as exc:
+        logger.error("ai_provider_error", provider=provider, error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI provider temporarily unavailable. Please try again.",
+        )
     return ExplainResponse(explanation=explanation, provider=provider)

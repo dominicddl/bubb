@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from supabase import create_client
+import structlog
+from fastapi import APIRouter, Depends, Request, HTTPException, status
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_user_token
+from app.auth.supabase import get_supabase
+from app.rate_limit import limiter, CRUD_LIMIT, WRITE_LIMIT, AI_LIMIT_AUTH, _get_user_id
 from app.config import settings
 from app.models.topics import (
     CreateTopicRequest,
@@ -9,6 +11,8 @@ from app.models.topics import (
     TopicSuggestionRequest,
     TopicSuggestionResponse,
 )
+
+logger = structlog.get_logger()
 
 router = APIRouter()
 
@@ -24,16 +28,15 @@ TOPIC_SUGGESTION_PROMPT = (
 )
 
 
-def get_supabase():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
-
-
 @router.get("/topics", response_model=list[TopicResponse])
+@limiter.limit(CRUD_LIMIT, key_func=_get_user_id)
 async def list_topics(
+    request: Request,
     user: dict = Depends(get_current_user),
+    token: str = Depends(get_user_token),
 ) -> list[TopicResponse]:
     """List all topics for the authenticated user ordered by updated_at desc."""
-    supabase = get_supabase()
+    supabase = get_supabase(token)
     result = (
         supabase.table("topics")
         .select("*")
@@ -45,12 +48,15 @@ async def list_topics(
 
 
 @router.post("/topics", response_model=TopicResponse)
+@limiter.limit(WRITE_LIMIT, key_func=_get_user_id)
 async def create_topic(
+    request: Request,
     body: CreateTopicRequest,
     user: dict = Depends(get_current_user),
+    token: str = Depends(get_user_token),
 ) -> TopicResponse:
     """Create a new topic for the authenticated user, reusing existing if name matches."""
-    supabase = get_supabase()
+    supabase = get_supabase(token)
     user_id = user["sub"]
 
     # Check for existing topic with same name (case-insensitive)
@@ -77,12 +83,13 @@ async def create_topic(
 async def delete_topic(
     topic_id: str,
     user: dict = Depends(get_current_user),
+    token: str = Depends(get_user_token),
 ) -> dict:
     """Delete a topic owned by the authenticated user.
 
     Notes in this topic are kept but their topic_id is set to NULL.
     """
-    supabase = get_supabase()
+    supabase = get_supabase(token)
     user_id = user["sub"]
 
     # Verify ownership
@@ -113,14 +120,17 @@ async def delete_topic(
 
 
 @router.post("/topics/suggest", response_model=TopicSuggestionResponse)
+@limiter.limit(AI_LIMIT_AUTH, key_func=_get_user_id)
 async def suggest_topic(
+    request: Request,
     body: TopicSuggestionRequest,
     user: dict = Depends(get_current_user),
+    token: str = Depends(get_user_token),
 ) -> TopicSuggestionResponse:
     """AI-powered topic suggestion that reuses existing topics when possible."""
     from openai import AsyncOpenAI
 
-    supabase = get_supabase()
+    supabase = get_supabase(token)
 
     # Limit to 30 existing topics to avoid prompt bloat (Pitfall 6)
     limited_topics = body.existing_topics[:30]
@@ -134,36 +144,34 @@ async def suggest_topic(
 
     # Default to openai gpt-4o-mini; short non-streaming call
     provider = body.provider or "openai"
+    logger.info("ai_provider_call", provider=provider, action="topic_suggestion")
 
-    if provider == "openai":
-        client = AsyncOpenAI(api_key=settings.openai_api_key)
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            temperature=0.3,
-            max_tokens=30,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        suggestion = (response.choices[0].message.content or "").strip()
-    elif provider == "anthropic":
-        from anthropic import AsyncAnthropic
+    try:
+        if provider == "openai":
+            client = AsyncOpenAI(api_key=settings.openai_api_key)
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                temperature=0.3,
+                max_tokens=30,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            suggestion = (response.choices[0].message.content or "").strip()
+        else:
+            from anthropic import AsyncAnthropic
 
-        client = AsyncAnthropic(api_key=settings.anthropic_api_key)
-        response = await client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=30,
-            messages=[{"role": "user", "content": prompt}],
+            client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+            response = await client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=30,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            suggestion = (response.content[0].text if response.content else "").strip()
+    except Exception as exc:
+        logger.error("ai_provider_error", provider=provider, error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI provider temporarily unavailable. Please try again.",
         )
-        suggestion = (response.content[0].text if response.content else "").strip()
-    else:
-        # google provider
-        from google import genai
-
-        client = genai.Client(api_key=settings.gemini_api_key)
-        response = await client.aio.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-        )
-        suggestion = (response.text or "").strip()
 
     # Case-insensitive match against ALL user's topics in the DB
     match_result = (
