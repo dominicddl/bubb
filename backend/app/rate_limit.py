@@ -94,7 +94,7 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSO
 
 
 # Rate limit strings for each tier
-AI_LIMIT_AUTH = "10/minute"
-AI_LIMIT_UNAUTH = "3/minute"
+AI_LIMIT_AUTH = "30/minute"
+AI_LIMIT_UNAUTH = "5/minute"
 CRUD_LIMIT = "60/minute"
 WRITE_LIMIT = "30/minute"

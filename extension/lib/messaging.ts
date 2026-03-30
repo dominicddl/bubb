@@ -199,7 +199,7 @@ export interface AuthResponse {
 
 export type DepthLevel = 'simple' | 'standard' | 'deep';
 
-export type Provider = 'openai' | 'anthropic' | 'google';
+export type Provider = 'openai' | 'anthropic';
 
 export interface ConversationTurn {
   question: string;

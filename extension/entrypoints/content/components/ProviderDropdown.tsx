@@ -11,7 +11,6 @@ interface ProviderDropdownProps {
 const PROVIDERS: { value: Provider; label: string }[] = [
   { value: 'openai', label: 'GPT-4o mini' },
   { value: 'anthropic', label: 'Claude Haiku' },
-  { value: 'google', label: 'Gemini Flash' },
 ];
 
 export function ProviderDropdown({ activeProvider, onProviderChange, disabled }: ProviderDropdownProps) {
