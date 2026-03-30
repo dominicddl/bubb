@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 
-from app.config import settings
+from app.auth.dependencies import _decode_token
 
 logger = structlog.get_logger()
 
@@ -16,16 +16,10 @@ def _is_authenticated(request: Request) -> bool:
     """Return True if the request carries a valid Bearer JWT."""
     auth = request.headers.get("authorization", "")
     if auth.startswith("Bearer "):
-        token = auth[7:]
         try:
-            jwt.decode(
-                token,
-                settings.supabase_jwt_secret,
-                audience="authenticated",
-                algorithms=["HS256"],
-            )
+            _decode_token(auth[7:])
             return True
-        except jwt.PyJWTError:
+        except (jwt.PyJWTError, Exception):
             pass
     return False
 
@@ -36,15 +30,10 @@ def _get_user_id_or_ip(request: Request) -> str:
     if auth.startswith("Bearer "):
         token = auth[7:]
         try:
-            payload = jwt.decode(
-                token,
-                settings.supabase_jwt_secret,
-                audience="authenticated",
-                algorithms=["HS256"],
-            )
+            payload = _decode_token(token)
             return f"user:{payload['sub']}"
-        except jwt.PyJWTError:
-            pass
+        except (jwt.PyJWTError, Exception) as e:
+            logger.warning("rate_limit_jwt_decode_failed", error=str(e))
     return f"ip:{request.client.host if request.client else '0.0.0.0'}"
 
 
