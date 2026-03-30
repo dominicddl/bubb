@@ -49,7 +49,7 @@ def _mock_supabase_empty():
 
 @pytest.mark.asyncio
 async def test_user_cannot_delete_other_users_note(client, valid_token):
-    """Deleting another user's note returns 404, not the note."""
+    """Deleting another user's note returns 404."""
     mock = _mock_supabase_empty()
 
     with patch("app.routers.notes.get_supabase", return_value=mock):
@@ -58,9 +58,8 @@ async def test_user_cannot_delete_other_users_note(client, valid_token):
             headers={"Authorization": f"Bearer {valid_token}"},
         )
 
-    # delete_note does a select first; if empty, it just deletes nothing (no error)
-    # The important thing is it filters by user_id — the mock returns empty
-    assert response.status_code == 200
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Note not found"
 
 
 @pytest.mark.asyncio
