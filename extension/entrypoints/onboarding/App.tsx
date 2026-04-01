@@ -268,5 +268,127 @@ function WelcomeState() {
 }
 
 function AllSetState() {
-  return <div>All set placeholder</div>;
+  const handleStartBrowsing = () => {
+    chrome.tabs.getCurrent((tab) => {
+      if (tab?.id) chrome.tabs.remove(tab.id);
+    });
+  };
+
+  return (
+    <div className="max-w-[600px] mx-auto px-10 pt-16 pb-12 text-center animate-[fadeUp_0.5s_ease-out]">
+      {/* Success checkmark */}
+      <div
+        className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"
+        style={{
+          background: 'hsl(var(--accent-green-light))',
+          border: '2px solid hsl(var(--accent-green))',
+        }}
+      >
+        <span className="text-[26px]" style={{ color: 'hsl(var(--accent-green))' }}>✓</span>
+      </div>
+
+      <span
+        className="inline-block text-[10px] font-medium tracking-[0.15em] uppercase mb-4"
+        style={{ fontFamily: 'var(--font-mono)', color: 'hsl(var(--accent-gold))' }}
+      >
+        [ ALL SET ]
+      </span>
+
+      <h1
+        className="text-[26px] font-bold mb-2.5 tracking-[-0.02em]"
+        style={{ fontFamily: 'var(--font-sans)', color: 'hsl(24 10% 10%)' }}
+      >
+        Your first note is saved!
+      </h1>
+
+      <p
+        className="text-[13.5px] leading-[1.7] mb-9"
+        style={{ color: 'hsl(24 6% 46%)', fontFamily: 'var(--font-sans)' }}
+      >
+        Here's how to use bubb as you browse:
+      </p>
+
+      {/* Instructions card */}
+      <div
+        className="rounded-xl p-7 text-left max-w-[400px] mx-auto mb-8"
+        style={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+      >
+        <div className="flex items-start gap-3.5 mb-4.5">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: 'hsl(var(--background))', border: '1px solid hsl(var(--border))' }}
+          >
+            <div className="w-4 h-4 rounded" style={{ background: '#0d7a6e' }} />
+          </div>
+          <div>
+            <p
+              className="text-[13.5px] font-semibold mb-0.5"
+              style={{ fontFamily: 'var(--font-sans)', color: 'hsl(24 10% 14%)' }}
+            >
+              Click the bubb icon in your toolbar
+            </p>
+            <p className="text-[12px]" style={{ color: 'hsl(24 6% 50%)' }}>
+              Opens your side panel with saved notes and topics
+            </p>
+          </div>
+        </div>
+        <div className="flex items-start gap-3.5">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: 'hsl(var(--background))', border: '1px solid hsl(var(--border))' }}
+          >
+            <span
+              className="text-[11px]"
+              style={{ fontFamily: 'var(--font-mono)', color: 'hsl(24 6% 50%)' }}
+            >
+              Aa
+            </span>
+          </div>
+          <div>
+            <p
+              className="text-[13.5px] font-semibold mb-0.5"
+              style={{ fontFamily: 'var(--font-sans)', color: 'hsl(24 10% 14%)' }}
+            >
+              Highlight text on any page
+            </p>
+            <p className="text-[12px]" style={{ color: 'hsl(24 6% 50%)' }}>
+              Works everywhere — articles, PDFs, lecture notes
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* CTA */}
+      <div className="max-w-[400px] mx-auto">
+        <button
+          onClick={handleStartBrowsing}
+          className="group flex items-center justify-between w-full h-[52px] rounded-xl px-5 transition-opacity hover:opacity-90 mb-3"
+          style={{ background: 'hsl(24 8% 16%)', color: 'hsl(33 26% 95%)' }}
+        >
+          <span className="text-[13px] font-medium" style={{ fontFamily: 'var(--font-sans)' }}>
+            Start browsing
+          </span>
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center transition-transform group-hover:translate-x-0.5"
+            style={{ background: 'hsl(var(--accent-coral))' }}
+          >
+            <ArrowRight className="w-3.5 h-3.5 text-white" />
+          </div>
+        </button>
+        <p
+          className="text-[10px]"
+          style={{ fontFamily: 'var(--font-mono)', color: 'hsl(24 5% 58%)', letterSpacing: '0.02em' }}
+        >
+          closes this tab · bubb is ready on every page
+        </p>
+      </div>
+
+      <style>{`
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+    </div>
+  );
 }
