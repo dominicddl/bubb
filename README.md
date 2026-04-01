@@ -54,10 +54,6 @@ supabase start
 | Database | Supabase (Postgres + Auth + RLS) |
 | AI | OpenAI + Anthropic SDKs (user-provided keys) |
 
-## Auth Flow
-
-Google OAuth via Supabase Auth with `signInWithIdToken`. The extension opens a Chrome tab for Google sign-in, captures the ID token from the redirect, and creates a native Supabase session with refresh tokens.
-
 ## Developer Workflows
 
 ### Branching Strategy
@@ -66,7 +62,7 @@ Google OAuth via Supabase Auth with `signInWithIdToken`. The extension opens a C
 |--------|---------|
 | `main` | Stable code. All PRs target this branch. |
 | `staging` | Mirrors production. Merging `main` → `staging` triggers a Render deploy. |
-| Feature branches | Use `dom/<feature-name>` prefix. Branch off `main`. |
+| Feature branches | Use `feature/<feature-name>` prefix. Branch off `main`. |
 
 **Flow:** feature branch → PR to `main` → merge → merge `main` into `staging` → auto-deploy.
 

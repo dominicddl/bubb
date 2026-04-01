@@ -17,7 +17,14 @@ from app.routers import explain, health, notes, topics
 setup_logging()
 logger = structlog.get_logger()
 
-app = FastAPI(title="bubb API", version="0.1.0")
+_is_prod = settings.environment == "production"
+app = FastAPI(
+    title="bubb API",
+    version="0.1.0",
+    docs_url=None if _is_prod else "/docs",
+    redoc_url=None if _is_prod else "/redoc",
+    openapi_url=None if _is_prod else "/openapi.json",
+)
 
 # Rate limiting
 app.state.limiter = limiter
