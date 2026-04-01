@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 
 from app.models.explain import Provider
@@ -13,13 +13,13 @@ class TopicResponse(BaseModel):
 
 
 class CreateTopicRequest(BaseModel):
-    name: str
+    name: str = Field(max_length=100)
 
 
 class TopicSuggestionRequest(BaseModel):
-    highlighted_text: str
-    explanation: str
-    existing_topics: list[str] = []
+    highlighted_text: str = Field(max_length=5000)
+    explanation: str = Field(max_length=5000)
+    existing_topics: list[str] = Field(default=[], max_length=30)
     provider: Provider | None = None
 
 

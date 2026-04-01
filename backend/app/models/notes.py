@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 
 
@@ -17,7 +17,7 @@ class NoteCountResponse(BaseModel):
 
 
 class AssignTopicRequest(BaseModel):
-    topic_id: str
+    topic_id: str = Field(max_length=36)
 
 
 class CreateNoteRequest(BaseModel):

@@ -71,12 +71,10 @@ async def test_create_note_new(client, valid_token):
 
     # Insert returns new note
     mock_insert_result = MagicMock()
-    mock_insert_result.data = {"id": "new-note-123"}
+    mock_insert_result.data = [{"id": "new-note-123"}]
     (
         mock_supabase.table.return_value
         .insert.return_value
-        .select.return_value
-        .single.return_value
         .execute.return_value
     ) = mock_insert_result
 
@@ -145,17 +143,25 @@ async def test_delete_note_requires_auth(client):
 
 @pytest.mark.asyncio
 async def test_delete_note(client, valid_token):
-    """DELETE /api/notes/{id} deletes the note."""
+    """DELETE /api/notes/{id} verifies ownership then calls delete RPC."""
     mock_supabase = MagicMock()
-    mock_delete_result = MagicMock()
-    mock_delete_result.data = [{"id": "note-123"}]
+
+    # Mock ownership check
+    mock_select_result = MagicMock()
+    mock_select_result.data = [{"id": "note-123"}]
     (
         mock_supabase.table.return_value
-        .delete.return_value
+        .select.return_value
         .eq.return_value
         .eq.return_value
+        .limit.return_value
         .execute.return_value
-    ) = mock_delete_result
+    ) = mock_select_result
+
+    # Mock the RPC call
+    mock_rpc_result = MagicMock()
+    mock_rpc_result.data = None
+    mock_supabase.rpc.return_value.execute.return_value = mock_rpc_result
 
     with patch("app.routers.notes.get_supabase", return_value=mock_supabase):
         response = await client.delete(
@@ -165,6 +171,10 @@ async def test_delete_note(client, valid_token):
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+    mock_supabase.rpc.assert_called_once_with(
+        "delete_note_with_cleanup",
+        {"p_note_id": "note-123"},
+    )
 
 
 @pytest.mark.asyncio
