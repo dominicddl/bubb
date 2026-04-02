@@ -30,7 +30,9 @@ export function Hero() {
       {/* CTAs */}
       <div className="fade-up mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
         <a
-          href="#"
+          href="https://chromewebstore.google.com/detail/bubb/cphjlpnlmpckiohailpepmbfhmgfgadk"
+          target="_blank"
+          rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-[var(--color-coral)] text-white font-semibold text-base hover:brightness-110 transition-all shadow-[0_4px_16px_rgba(190,75,65,0.35)] hover:shadow-[0_6px_24px_rgba(190,75,65,0.45)] hover:-translate-y-0.5"
         >
           Add to Chrome — it's free

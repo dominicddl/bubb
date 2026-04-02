@@ -38,20 +38,16 @@ export function Nav() {
           >
             Features
           </a>
-          <a
-            href="#pricing"
-            className="text-sm font-medium text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] transition-colors"
-          >
-            Pricing
-          </a>
-          <a
+<a
             href="#"
             className="text-sm font-medium text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] transition-colors"
           >
             Sign In
           </a>
           <a
-            href="#"
+            href="https://chromewebstore.google.com/detail/bubb/cphjlpnlmpckiohailpepmbfhmgfgadk"
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-coral)] text-white text-sm font-semibold hover:brightness-110 transition-all shadow-[0_2px_8px_rgba(190,75,65,0.3)]"
           >
             Try bubb
