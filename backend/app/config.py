@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     anthropic_api_key: str = ""
     default_ai_provider: str = "openai"
+    environment: str = "development"
     cors_origins: list[str] = ["chrome-extension://*"]
 
     model_config = {"env_file": ["../.env", ".env"]}
