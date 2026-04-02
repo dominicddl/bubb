@@ -23,7 +23,9 @@ export function FinalCTA() {
         </p>
         <div className="fade-up">
           <a
-            href="#"
+            href="https://chromewebstore.google.com/detail/bubb/cphjlpnlmpckiohailpepmbfhmgfgadk"
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-8 py-4 rounded-full bg-[var(--color-coral)] text-white font-semibold text-lg hover:brightness-110 transition-all shadow-[0_4px_20px_rgba(190,75,65,0.4)] hover:shadow-[0_8px_32px_rgba(190,75,65,0.5)] hover:-translate-y-0.5"
           >
             Add to Chrome — it's free

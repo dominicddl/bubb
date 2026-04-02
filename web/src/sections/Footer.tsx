@@ -24,12 +24,7 @@ export function Footer() {
                   Features
                 </a>
               </li>
-              <li>
-                <a href="#pricing" className="text-sm text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] transition-colors">
-                  Pricing
-                </a>
-              </li>
-              <li>
+<li>
                 <Link to="/privacy" className="text-sm text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] transition-colors">
                   Privacy Policy
                 </Link>
