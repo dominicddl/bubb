@@ -43,6 +43,15 @@ export default defineContentScript({
   cssInjectionMode: 'ui',
 
   async main(ctx) {
+    // If user already completed onboarding, redirect away from the onboarding page
+    if (window.location.pathname === '/onboarding') {
+      const { onboarding_completed } = await chrome.storage.local.get('onboarding_completed');
+      if (onboarding_completed) {
+        window.location.href = window.location.origin;
+        return;
+      }
+    }
+
     let currentUi: Awaited<ReturnType<typeof createShadowRootUi>> | null = null;
 
     function closePopup() {
@@ -57,6 +66,16 @@ export default defineContentScript({
       if (message.type === 'AUTH_STATE_CHANGED' && message.payload?.isAuthenticated) {
         const name = message.payload.user?.name || 'User';
         showAuthToast(`Signed in as ${name}`);
+
+        // Notify the host page (e.g. usebubb.com/onboarding) so it can react to sign-in
+        document.dispatchEvent(
+          new CustomEvent('bubb:auth-changed', { detail: message.payload }),
+        );
+
+        // Mark onboarding as completed so the user won't see it again
+        if (window.location.pathname === '/onboarding') {
+          chrome.storage.local.set({ onboarding_completed: true });
+        }
       }
     });
 
@@ -106,6 +125,7 @@ export default defineContentScript({
               explanationCache.set(text, cache);
             };
 
+            const isOnboarding = window.location.pathname === '/onboarding';
             root.render(
               <ExplanationPopup
                 selectedText={text}
@@ -116,6 +136,7 @@ export default defineContentScript({
                 onClose={closePopup}
                 initialCache={cachedResult}
                 onCacheUpdate={handleCacheUpdate}
+                isOnboarding={isOnboarding}
               />
             );
             return root;

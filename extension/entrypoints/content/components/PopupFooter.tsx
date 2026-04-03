@@ -9,6 +9,7 @@ interface PopupFooterProps {
   followUpCapReached: boolean;
   activeProvider: Provider;
   onProviderChange: (provider: Provider) => void;
+  pulse?: boolean;
 }
 
 export function PopupFooter({
@@ -17,6 +18,7 @@ export function PopupFooter({
   followUpCapReached,
   activeProvider,
   onProviderChange,
+  pulse,
 }: PopupFooterProps) {
   const [inputValue, setInputValue] = useState('');
 
@@ -33,7 +35,8 @@ export function PopupFooter({
   };
 
   return (
-    <div className="flex items-center gap-[8px] border-t border-[hsl(var(--border))] px-[16px] py-[8px]">
+    <div className={`flex items-center gap-[8px] border-t border-[hsl(var(--border))] px-[16px] py-[8px]${pulse ? ' animate-[onboardingPulse_1.5s_ease-in-out_infinite]' : ''}`} style={pulse ? { background: 'hsl(4 58% 58% / 0.06)' } : undefined}>
+      {pulse && <style>{`@keyframes onboardingPulse { 0%, 100% { background: hsl(4 58% 58% / 0.08); } 50% { background: hsl(4 58% 58% / 0.02); } }`}</style>}
       {!followUpCapReached ? (
         <>
           <input
