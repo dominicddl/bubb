@@ -21,11 +21,12 @@ interface ExplanationPopupProps {
   abortSignal?: AbortSignal;
   initialCache?: Record<DepthLevel, string>;
   onCacheUpdate?: (cache: Record<DepthLevel, string>) => void;
+  isOnboarding?: boolean;
 }
 
 export function ExplanationPopup({
   selectedText, context, sourceUrl, pageTitle, position, onClose, abortSignal,
-  initialCache, onCacheUpdate,
+  initialCache, onCacheUpdate, isOnboarding,
 }: ExplanationPopupProps) {
   const hasCachedResult = initialCache && Object.values(initialCache).some(v => v.length > 0);
   const [activeDepth, setActiveDepth] = useState<DepthLevel>('simple');
@@ -56,6 +57,15 @@ export function ExplanationPopup({
   const [isLoadingTopic, setIsLoadingTopic] = useState(false);
   const [showTopicSpinner, setShowTopicSpinner] = useState(false);
   const [topicFlowComplete, setTopicFlowComplete] = useState(false);
+
+  // Onboarding cursor guidance state
+  type OnboardingCursorStep = 'waiting' | 'point-followup' | 'waiting-for-stream' | 'point-login' | 'done';
+  const [onboardingCursor, setOnboardingCursor] = useState<OnboardingCursorStep>(
+    isOnboarding ? 'waiting' : 'done',
+  );
+  const popupRef = useRef<HTMLDivElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
+  const saveToastRef = useRef<HTMLDivElement>(null);
 
   const streamPortRef = useRef<StreamPort | null>(null);
   const followUpDepthRef = useRef<DepthLevel | null>(null);
@@ -553,11 +563,49 @@ export function ExplanationPopup({
     }
   };
 
+  // Onboarding cursor transitions
+  useEffect(() => {
+    if (!isOnboarding || onboardingCursor !== 'waiting') return;
+    if (!depthStreaming.simple && depthCache.simple.length > 0) {
+      // Delay so the user sees the explanation first
+      const timer = setTimeout(() => setOnboardingCursor('point-followup'), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [isOnboarding, onboardingCursor, depthStreaming.simple, depthCache.simple]);
+
+  // Hide follow-up cursor immediately when user sends a follow-up
+  useEffect(() => {
+    if (!isOnboarding || onboardingCursor !== 'point-followup') return;
+    if (thread.length > 0) {
+      setOnboardingCursor('waiting-for-stream');
+    }
+  }, [isOnboarding, onboardingCursor, thread.length]);
+
+  // Show login cursor after follow-up finishes streaming
+  useEffect(() => {
+    if (!isOnboarding || onboardingCursor !== 'waiting-for-stream') return;
+    if (thread.length > 0) {
+      const lastTurn = thread[thread.length - 1];
+      if (!lastTurn.isStreaming && lastTurn.answer.length > 0) {
+        const timer = setTimeout(() => setOnboardingCursor('point-login'), 800);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isOnboarding, onboardingCursor, thread]);
+
+  useEffect(() => {
+    if (!isOnboarding) return;
+    if (isSignedIn && (onboardingCursor === 'point-login' || onboardingCursor === 'waiting-for-stream')) {
+      onClose();
+    }
+  }, [isOnboarding, onboardingCursor, isSignedIn, onClose]);
+
   // Derived: is anything streaming that should block follow-up input?
   const anyStreaming = depthStreaming[activeDepth] || followUpDepthRef.current !== null;
 
   return (
     <div
+      ref={popupRef}
       onMouseEnter={resetDismissTimer}
       onMouseMove={resetDismissTimer}
       onClick={resetDismissTimer}
@@ -596,23 +644,29 @@ export function ExplanationPopup({
           )}
           <div ref={bottomRef} />
         </div>
-        <PopupFooter
-          onSendFollowUp={handleFollowUp}
-          isStreaming={anyStreaming}
-          followUpCapReached={thread.length >= 3}
-          activeProvider={activeProvider}
-          onProviderChange={handleProviderChange}
-        />
-        {saveAttemptedRef.current && (noteId || saveError || !isSignedIn) && (
-          <SaveToast
-            noteId={noteId}
-            isSignedIn={isSignedIn}
-            onUndo={handleUndo}
-            onLogin={handleLogin}
-            onRetrySave={handleRetrySave}
-            saveError={saveError}
+        <div ref={footerRef}>
+          <PopupFooter
+            onSendFollowUp={handleFollowUp}
+            isStreaming={anyStreaming}
+            followUpCapReached={thread.length >= 3}
+            activeProvider={activeProvider}
+            onProviderChange={handleProviderChange}
+            pulse={onboardingCursor === 'point-followup'}
           />
-        )}
+        </div>
+        <div ref={saveToastRef}>
+          {saveAttemptedRef.current && (noteId || saveError || !isSignedIn) && (
+            <SaveToast
+              noteId={noteId}
+              isSignedIn={isSignedIn}
+              onUndo={handleUndo}
+              onLogin={handleLogin}
+              onRetrySave={handleRetrySave}
+              saveError={saveError}
+              pulse={onboardingCursor === 'point-login'}
+            />
+          )}
+        </div>
         {isSignedIn && noteId && showTopicSpinner && (
           <div className="flex items-center justify-center border-t border-[hsl(var(--border))] px-[16px] py-[8px]">
             <div className="w-3 h-3 border-2 border-[hsl(var(--muted-foreground))] border-t-transparent rounded-full animate-spin" />
@@ -628,6 +682,98 @@ export function ExplanationPopup({
           />
         )}
       </div>
+      {/* Floating onboarding cursors — rendered outside overflow-hidden */}
+      {onboardingCursor === 'point-followup' && (
+        <OnboardingFloatingCursor targetRef={footerRef} popupRef={popupRef} label="Ask a follow-up question" align="left" />
+      )}
+      {onboardingCursor === 'point-login' && !isSignedIn && (
+        <OnboardingFloatingCursor targetRef={saveToastRef} popupRef={popupRef} label="Sign in to save your note" align="right" />
+      )}
     </div>
   );
 }
+
+function OnboardingFloatingCursor({
+  targetRef,
+  popupRef,
+  label,
+  align = 'left',
+}: {
+  targetRef: React.RefObject<HTMLDivElement | null>;
+  popupRef: React.RefObject<HTMLDivElement | null>;
+  label: string;
+  align?: 'left' | 'right';
+}) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    const update = () => {
+      const target = targetRef.current;
+      const popup = popupRef.current;
+      if (!target || !popup) return;
+      const popupRect = popup.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      setPos({
+        top: targetRect.bottom - popupRect.top,
+        left: align === 'left'
+          ? targetRect.left - popupRect.left + 16
+          : targetRect.right - popupRect.left - 80,
+      });
+    };
+    update();
+    const timer = setInterval(update, 500);
+    return () => clearInterval(timer);
+  }, [targetRef, popupRef, align]);
+
+  if (!pos) return null;
+
+  return (
+    <div
+      className="animate-[cursorBounce_1.5s_ease-in-out_infinite]"
+      style={{
+        position: 'absolute',
+        top: pos.top,
+        left: pos.left,
+        zIndex: 20,
+        pointerEvents: 'none',
+      }}
+    >
+      <svg
+        width="18"
+        height="22"
+        viewBox="0 0 20 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' }}
+      >
+        <path
+          d="M5.5 0L5.5 17.5L9.3 13.7L13.2 21.5L15.8 20.3L11.9 12.5L17 12.5L5.5 0Z"
+          fill="hsl(4 58% 58%)"
+          stroke="white"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <div
+        className="whitespace-nowrap rounded-md px-2 py-1 text-[10px] font-medium"
+        style={{
+          background: 'hsl(4 58% 58%)',
+          color: 'white',
+          fontFamily: 'var(--font-sans)',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          marginTop: '2px',
+          marginLeft: '-4px',
+        }}
+      >
+        {label}
+      </div>
+      <style>{`
+        @keyframes cursorBounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-5px); }
+        }
+      `}</style>
+    </div>
+  );
+}
+

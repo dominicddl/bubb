@@ -8,9 +8,10 @@ interface SaveToastProps {
   onLogin: () => void;
   onRetrySave: () => void;
   saveError: boolean;
+  pulse?: boolean;
 }
 
-export function SaveToast({ noteId, isSignedIn, onUndo, onLogin, onRetrySave, saveError }: SaveToastProps) {
+export function SaveToast({ noteId, isSignedIn, onUndo, onLogin, onRetrySave, saveError, pulse }: SaveToastProps) {
   const [visible, setVisible] = useState(true);
   const [undone, setUndone] = useState(false);
 
@@ -24,7 +25,8 @@ export function SaveToast({ noteId, isSignedIn, onUndo, onLogin, onRetrySave, sa
 
   if (!isSignedIn) {
     return (
-      <div className="flex items-center justify-between border-t border-[hsl(var(--border))] px-[16px] py-[8px]">
+      <div className={`flex items-center justify-between border-t border-[hsl(var(--border))] px-[16px] py-[8px]${pulse ? ' animate-[onboardingPulse_1.5s_ease-in-out_infinite]' : ''}`}>
+        {pulse && <style>{`@keyframes onboardingPulse { 0%, 100% { background: hsl(4 58% 58% / 0.08); } 50% { background: hsl(4 58% 58% / 0.02); } }`}</style>}
         <span className="text-[12px] text-[hsl(var(--muted-foreground))]">Sign in to save notes</span>
         <button
           onClick={onLogin}

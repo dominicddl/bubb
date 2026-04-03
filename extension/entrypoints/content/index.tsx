@@ -57,6 +57,11 @@ export default defineContentScript({
       if (message.type === 'AUTH_STATE_CHANGED' && message.payload?.isAuthenticated) {
         const name = message.payload.user?.name || 'User';
         showAuthToast(`Signed in as ${name}`);
+
+        // Notify the host page (e.g. usebubb.com/onboarding) so it can react to sign-in
+        document.dispatchEvent(
+          new CustomEvent('bubb:auth-changed', { detail: message.payload }),
+        );
       }
     });
 
@@ -106,6 +111,7 @@ export default defineContentScript({
               explanationCache.set(text, cache);
             };
 
+            const isOnboarding = window.location.pathname === '/onboarding';
             root.render(
               <ExplanationPopup
                 selectedText={text}
@@ -116,6 +122,7 @@ export default defineContentScript({
                 onClose={closePopup}
                 initialCache={cachedResult}
                 onCacheUpdate={handleCacheUpdate}
+                isOnboarding={isOnboarding}
               />
             );
             return root;
