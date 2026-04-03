@@ -43,6 +43,15 @@ export default defineContentScript({
   cssInjectionMode: 'ui',
 
   async main(ctx) {
+    // If user already completed onboarding, redirect away from the onboarding page
+    if (window.location.pathname === '/onboarding') {
+      const { onboarding_completed } = await chrome.storage.local.get('onboarding_completed');
+      if (onboarding_completed) {
+        window.location.href = window.location.origin;
+        return;
+      }
+    }
+
     let currentUi: Awaited<ReturnType<typeof createShadowRootUi>> | null = null;
 
     function closePopup() {
@@ -62,6 +71,11 @@ export default defineContentScript({
         document.dispatchEvent(
           new CustomEvent('bubb:auth-changed', { detail: message.payload }),
         );
+
+        // Mark onboarding as completed so the user won't see it again
+        if (window.location.pathname === '/onboarding') {
+          chrome.storage.local.set({ onboarding_completed: true });
+        }
       }
     });
 
